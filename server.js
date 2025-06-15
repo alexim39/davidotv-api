@@ -5,6 +5,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 
 import AuthRouter from './src/apps/auth/index.js';
+import YoutubeRouter from './src/apps/youtube/index.js';
 import EmailSubscriptionRouter from './src/apps/email-subscription/index.js';
 
 
@@ -28,6 +29,7 @@ app.use(cors({
 app.get('/', (req, res) => res.send('Node server is up and running'));
 app.use('/auth', AuthRouter);
 app.use('/email', EmailSubscriptionRouter);
+app.use('/youtube', YoutubeRouter);
 
 
 /* DB connection */

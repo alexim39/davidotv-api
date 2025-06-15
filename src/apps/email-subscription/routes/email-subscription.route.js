@@ -1,10 +1,10 @@
 import express from 'express';
 import { subscribe, unsubscribe} from '../controllers/email-subscription.controller.js'
 
-const emailSubscriptionRouter = express.Router();
+const EmailSubscriptionRouter = express.Router();
 
 // User email subscription
-emailSubscriptionRouter.post('/subscribe', subscribe);
-emailSubscriptionRouter.post('/unsubscribe', unsubscribe);
+EmailSubscriptionRouter.post('/subscribe', subscribe);
+EmailSubscriptionRouter.post('/unsubscribe', unsubscribe);
 
-export default emailSubscriptionRouter;
+export default EmailSubscriptionRouter;
