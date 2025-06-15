@@ -1,108 +1,90 @@
-
 import { YoutubeVideoModel } from '../models/youtube.model.js';
+import mongoose from 'mongoose';
 
-export const addVideos = async (req, res) => {
+// @desc    Get videos by type
+// @route   GET /youtube/videos
+// @access  Public
+export const getVideos = async (req, res) => {
     try {
-        let videos = req.body;
+        const { menuType, isOfficialContent, limit, sort } = req.query;
 
-        // Ensure input is always an array
-        if (!Array.isArray(videos)) {
-            videos = [videos];
+        let query = {};
+        
+        if (menuType === 'music') {
+            query = { 
+                isOfficialContent: true,
+                // Keep the channelId filter but make it optional
+                ...(menuType === 'music' && { channelId: 'UCkBV3nBa0iRdxEGc4DUS3xA' })
+            };
+        } 
+        else if (menuType === 'trending') {
+            query = { 
+                // Less restrictive engagement score
+                engagementScore: { $gt: 5000 } 
+            };
+        }
+        else if (menuType === 'videos') {
+            query = {
+                // For general videos, exclude official music
+                isOfficialContent: { $ne: true }
+            };
         }
 
-        // Validate required fields for each video
-        for (const video of videos) {
-            if (!video.youtubeVideoId) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Each video must have a youtubeVideoId"
-                });
-            }
-        }
-
-        // Get all youtubeVideoIds from the request
-        const videoIds = videos.map(v => v.youtubeVideoId);
-
-        // Find existing videos in the database
-        const existingVideos = await YoutubeVideoModel.find({
-            youtubeVideoId: { $in: videoIds }
-        }).select('youtubeVideoId');
-
-        const existingIds = existingVideos.map(v => v.youtubeVideoId);
-
-        // Filter out videos with duplicate youtubeVideoId
-        const newVideos = videos.filter(v => !existingIds.includes(v.youtubeVideoId));
-
-        if (newVideos.length === 0) {
-            return res.status(409).json({
-                success: false,
-                message: 'All provided videos already exist in the database.'
-            });
-        }
-
-        // Insert only new videos
-        YoutubeVideoModel.insertMany(newVideos);
+        // Default sort by publishedAt if not specified
+        const sortOption = sort || '-publishedAt';
+        
+        const videos = await YoutubeVideoModel.find(query)
+            .sort(sortOption)
+            .limit(parseInt(limit) || 12)
+            .lean();
 
         res.status(200).json({
             success: true,
-            message: 'Videos uploaded successfully',
-            //insertedCount: insertedVideos.length,
-            skippedCount: videos.length - newVideos.length,
-            skippedIds: existingIds
+            data: videos.map(v => ({
+                ...v,
+                url: `https://www.youtube.com/watch?v=${v.youtubeVideoId}`
+            }))
         });
+
     } catch (error) {
-        console.error(error.message);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
-        });
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 }
 
-export const getAllVideos = async (req, res) => {
-    try {
-        const videos = await YoutubeVideoModel.find().sort({ createdAt: -1 });
-        res.status(200).json({
-            success: true,
-            data: videos
-        });
-    } catch (error) {
-        console.error(error.message);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
-        });
-    }
-}
 
+// @desc    Get single video by ID
+// @route   GET /youtube/videos/:id
+// @access  Public
 export const getVideoById = async (req, res) => {
     try {
-        const { youtubeVideoId } = req.params;
-
-        if (!youtubeVideoId) {
-            return res.status(400).json({
-                success: false,
-                message: "Video Id is required"
-            });
+        let video;
+        
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            video = await YoutubeVideoModel.findById(req.params.id).lean().exec();
+        } else {
+            video = await YoutubeVideoModel.findOne({ 
+                youtubeVideoId: req.params.id 
+            }).lean().exec();
         }
-
-        const video = await YoutubeVideoModel.findOne({ youtubeVideoId });
-
+        
         if (!video) {
             return res.status(404).json({
-                success: false,
-                message: "Video not found"
+                message: 'Video not found'
             });
         }
+        
+        // Add virtual URL field
+        const videoWithUrl = {
+            ...video,
+            url: `https://www.youtube.com/watch?v=${video.youtubeVideoId}`
+        };
+        
+        res.status(200).json(videoWithUrl);
 
-        res.status(200).json({
-            success: true,
-            data: video
-        });
     } catch (error) {
-        console.error(error.message);
+        console.error('Error in getVideoById:', error.message);
         res.status(500).json({
-            success: false,
             message: 'Internal server error'
         });
     }

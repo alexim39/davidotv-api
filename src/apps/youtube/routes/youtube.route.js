@@ -1,11 +1,12 @@
 import express from 'express';
-import {addVideos, getAllVideos } from '../controllers/youtube.controller.js'
+import {getVideos, getVideoById } from '../controllers/youtube.controller.js'
 
 const YoutubeRouter = express.Router();
 
 
 //YoutubeRouter.get('/trending', {});
-YoutubeRouter.post('/videos', addVideos);
-YoutubeRouter.get('/videos', getAllVideos);
+//YoutubeRouter.put('/videos', updateVideoMetrics);
+YoutubeRouter.get('/videos', getVideos);
+YoutubeRouter.get('/video/:videoId', getVideoById);
 
 export default YoutubeRouter;

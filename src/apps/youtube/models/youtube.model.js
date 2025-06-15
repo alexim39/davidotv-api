@@ -137,10 +137,6 @@ youtubeVideoSchema.index({
   isOfficialContent: 1 
 });
 
-// Virtual for URL
-youtubeVideoSchema.virtual('url').get(function() {
-  return `https://www.youtube.com/watch?v=${this.youtubeVideoId}`;
-});
 
 // Pre-save hook to calculate engagement score
 youtubeVideoSchema.pre('save', function(next) {
