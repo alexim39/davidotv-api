@@ -4,9 +4,11 @@ import mongoose from 'mongoose';
 // @desc    Get videos by type
 // @route   GET /youtube/videos
 // @access  Public
-export const getVideos = async (req, res) => {
+/* export const getVideos = async (req, res) => {
     try {
         const { menuType, isOfficialContent, limit, sort } = req.query;
+
+        console.log(req.query)
 
         let query = {};
         
@@ -50,6 +52,54 @@ export const getVideos = async (req, res) => {
         console.error(error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
+} */
+
+    // Update the getVideos function in your backend
+export const getVideos = async (req, res) => {
+    try {
+        const { menuType, isOfficialContent, limit, page = 0, sort } = req.query;
+
+        let query = {};
+        
+        if (menuType === 'music') {
+            query = { 
+                isOfficialContent: true,
+                ...(menuType === 'music' && { channelId: 'UCkBV3nBa0iRdxEGc4DUS3xA' })
+            };
+        } 
+        else if (menuType === 'trending') {
+            query = { 
+                engagementScore: { $gt: 5000 } 
+            };
+        }
+        else if (menuType === 'videos') {
+            query = {
+                isOfficialContent: { $ne: true }
+            };
+        }
+
+        const sortOption = sort || '-publishedAt';
+        const limitValue = parseInt(limit) || 12;
+        const skipValue = parseInt(page) * limitValue;
+        
+        const videos = await YoutubeVideoModel.find(query)
+            .sort(sortOption)
+            .skip(skipValue)
+            .limit(limitValue)
+            .lean();
+
+        res.status(200).json({
+            success: true,
+            data: videos.map(v => ({
+                ...v,
+                url: `https://www.youtube.com/watch?v=${v.youtubeVideoId}`
+            }))
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
 }
 
 
@@ -60,16 +110,17 @@ export const getVideoById = async (req, res) => {
     try {
         let video;
         
-        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
-            video = await YoutubeVideoModel.findById(req.params.id).lean().exec();
+        if (mongoose.Types.ObjectId.isValid(req.params.videoId)) {
+            video = await YoutubeVideoModel.findById(req.params.videoId).lean().exec();
         } else {
             video = await YoutubeVideoModel.findOne({ 
-                youtubeVideoId: req.params.id 
+                youtubeVideoId: req.params.videoId 
             }).lean().exec();
         }
         
         if (!video) {
             return res.status(404).json({
+                success: false,
                 message: 'Video not found'
             });
         }
@@ -80,11 +131,12 @@ export const getVideoById = async (req, res) => {
             url: `https://www.youtube.com/watch?v=${video.youtubeVideoId}`
         };
         
-        res.status(200).json(videoWithUrl);
+        res.status(200).json({success: true, data: videoWithUrl});
 
     } catch (error) {
         console.error('Error in getVideoById:', error.message);
         res.status(500).json({
+            success: false,
             message: 'Internal server error'
         });
     }

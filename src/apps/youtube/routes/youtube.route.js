@@ -7,6 +7,6 @@ const YoutubeRouter = express.Router();
 //YoutubeRouter.get('/trending', {});
 //YoutubeRouter.put('/videos', updateVideoMetrics);
 YoutubeRouter.get('/videos', getVideos);
-YoutubeRouter.get('/video/:videoId', getVideoById);
+YoutubeRouter.get('/videos/:videoId', getVideoById);
 
 export default YoutubeRouter;

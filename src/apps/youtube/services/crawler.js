@@ -26,18 +26,26 @@ const youtubeApi = rateLimit(axios.create(), {
 // Configuration
 const config = {
   youtube: {
-    apiKey: process.env.YOUTUBE_API_KEY,
+    apiKey: process.env.YOUTUBE_API_KEY || 'AIzaSyCnqQosiJ2hFLBMQM691p61f2mkkpg6Q7Y',
     apiUrl: 'https://www.googleapis.com/youtube/v3/search',
     videosUrl: 'https://www.googleapis.com/youtube/v3/videos',
     channelId: 'UCkBV3nBa0iRdxEGc4DUS3xA',
     maxResults: 50,
   },
+  // Production
   cron: {
     trending: '0 */6 * * *',
     music: '0 0 * * *',
     videos: '0 */3 * * *',
-    metrics: '0 */2 * * *'
+    metrics: '0 */3 * * *'
   },
+  // Dev
+  // cron: {
+  //   trending: '*/5 * * * *',
+  //   music: '*/5 * * * *',
+  //   videos: '*/5 * * * *',
+  //   metrics: '*/5 * * * *'
+  // },
   app: {
     maxRetries: 3,
     retryDelay: 5000,
