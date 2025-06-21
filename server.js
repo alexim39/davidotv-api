@@ -8,6 +8,7 @@ import './src/apps/youtube/services/crawler.js'; // Youtube crawler
 import AuthRouter from './src/apps/auth/index.js';
 import YoutubeRouter from './src/apps/youtube/index.js';
 import EmailSubscriptionRouter from './src/apps/email-subscription/index.js';
+import UserRouter from './src/apps/user/index.js';
 
 
 const port = process.env.PORT || 3000;
@@ -31,6 +32,7 @@ app.get('/', (req, res) => res.send('Node server is up and running'));
 app.use('/auth', AuthRouter);
 app.use('/email', EmailSubscriptionRouter);
 app.use('/youtube', YoutubeRouter);
+app.use('/user', UserRouter);
 
 
 /* DB connection */

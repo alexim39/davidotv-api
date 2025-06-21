@@ -116,7 +116,12 @@ const youtubeVideoSchema = mongoose.Schema(
         commentCount: Number
       },
       updatedAt: Date
-    }]
+    }],
+    shouldTrend: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
   },
   {
     timestamps: true,
@@ -166,5 +171,13 @@ youtubeVideoSchema.statics.findOfficialMusic = function(limit = 20) {
   .sort({ publishedAt: -1 })
   .limit(limit);
 };
+
+// In your Mongoose model (youtube.model.js)
+youtubeVideoSchema.index({
+    title: 'text',
+    description: 'text',
+    tags: 'text',
+    channel: 'text' // Add this line
+});
 
 export const YoutubeVideoModel = mongoose.model('YoutubeVideo', youtubeVideoSchema);
