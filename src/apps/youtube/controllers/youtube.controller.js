@@ -180,3 +180,53 @@ export const searchVideos = async (req, res) => {
         });
     }
 }
+
+export const getPlaylistVideos = async (req, res) => {
+    try {
+        const { 
+            page = 1, 
+            pageSize = 10, 
+            menuType, 
+            sort = '-publishedAt'
+        } = req.query;
+
+        const pageNum = Math.max(parseInt(page), 1);
+        let pageSizeNum = Math.min(Math.max(parseInt(pageSize), 1), 50);
+
+        const filter = menuType ? { menuTypes: menuType } : {};
+        
+        const totalCount = await YoutubeVideoModel.countDocuments(filter);
+        const totalPages = Math.ceil(totalCount / pageSizeNum);
+        
+        // More accurate hasNextPage calculation
+        const hasNextPage = pageNum < totalPages;
+        
+        const videos = await YoutubeVideoModel.find(filter)
+            .sort(sort === 'views' ? { views: -1 } : 
+                 sort === 'engagementScore' ? { engagementScore: -1 } : 
+                 { publishedAt: -1 })
+            .skip((pageNum - 1) * pageSizeNum)
+            .limit(pageSizeNum)
+            .lean();
+
+        res.status(200).json({
+            success: true,
+            data: videos,
+            pagination: {
+                currentPage: pageNum,
+                pageSize: pageSizeNum,
+                totalPages,
+                totalCount,
+                hasNextPage
+            }
+        });
+
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error',
+            error: error.message 
+        });
+    }
+}
