@@ -51,14 +51,6 @@ export const getSavedVideos = async (req, res) => {
     try {
 
         const { userId } = req.params;
-  
-        // Verify the requesting user has access to this library
-       /*  if (req.user._id.toString() !== userId) {
-            return res.status(403).json({
-            success: false,
-            message: 'Not authorized to access this library'
-            });
-        } */
 
         const user = await UserModel.findById(userId)
             .select('library.savedVideos')
@@ -103,7 +95,6 @@ export const getSavedVideos = async (req, res) => {
     }
 };
 
-
 // @desc    Remove video from user's library
 // @route   DELETE /api/users/library/remove/:userId/:youtubeVideoId
 // @access  Private
@@ -146,58 +137,194 @@ export const removeVideoFromLibrary = async (req, res) => {
 };
 
 
+// @desc    Get user's watch history
+// @route   GET /api/users/:userId/history
+// @access  Private
+export const getWatchHistory = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        const user = await UserModel.findById(userId)
+            .select('watchHistory');
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Format the response
+        const watchHistory = user.watchHistory.map(item => ({
+            id: item._id,
+            watchedAt: item.watchedAt,
+            watchProgress: item.watchProgress,
+            videoId: item.videoData?.youtubeVideoId,
+            title: item.videoData?.title,
+            channel: item.videoData?.channel,
+            thumbnail: item.videoData?.thumbnail,
+            duration: item.videoData?.duration,
+            publishedAt: item.videoData?.publishedAt
+        })).sort((a, b) => new Date(b.watchedAt) - new Date(a.watchedAt)); // Sort by newest first
+
+        res.status(200).json({
+            success: true,
+            count: watchHistory.length,
+            data: watchHistory
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error',
+            error: error.message 
+        });
+    }
+};
+
+// @desc    Remove video from watch history
+// @route   DELETE /api/users/history/remove/:videoId
+// @access  Private
+export const removeFromWatchedHistory = async (req, res) => {
+    try {
+        const { watchedVideoId, userId } = req.params;
+
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            userId,
+            {
+                $pull: {
+                    watchHistory: {
+                        $or: [
+                            { 'videoData.youtubeVideoId': watchedVideoId },
+                        ]
+                    }
+                }
+            },
+            { new: true, select: '-password' }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: updatedUser.watchHistory,
+            message: 'Video removed from history'
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
 // @desc    Update watch history
 // @route   POST /api/users/history/update
 // @access  Private
 export const updateWatchHistory = async (req, res) => {
-     try {
-         const { videoId, progress, videoData } = req.body;
-        const userId = req.user._id;
+    try {
+        const { 
+            userId,
+            progress,
+            youtubeVideoId,
+            title,
+            channel,
+            thumbnail,
+            duration,
+            publishedAt,
+            views,
+            likes,
+            dislikes
+         } = req.body;
 
-        // Find existing history entry
-        const user = await UserModel.findById(userId);
-        const existingEntry = user.watchHistory.find(entry => entry.videoId.toString() === videoId);
-
-        if (existingEntry) {
-            // Update existing entry
-            existingEntry.watchedAt = new Date();
-            existingEntry.watchProgress = Math.max(progress, existingEntry.watchProgress);
-            existingEntry.videoData = videoData;
-        } else {
-            // Add new entry
-            user.watchHistory.push({
-            videoId,
-            watchProgress: progress,
-            videoData
+        // Validate required fields
+        if (!userId || !youtubeVideoId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields: userId, videoData, or youtubeVideoId'
             });
         }
 
-        // Keep only the last 100 history items (adjust as needed)
-        if (user.watchHistory.length > 100) {
-            user.watchHistory = user.watchHistory.slice(-100);
+        // Find the user and update their watch history
+        const user = await UserModel.findById(userId);
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Check if the video already exists in watch history
+        const existingVideoIndex = user.watchHistory.findIndex(
+            item => item.videoData.youtubeVideoId === youtubeVideoId
+        );
+
+        const watchEntry = {
+            watchProgress: Math.min(Math.max(progress, 0), 100), // Ensure progress is between 0-100
+            videoData: {
+                youtubeVideoId,
+                title,
+                channel,
+                thumbnail,
+                duration,
+                views,
+                likes,
+                dislikes,
+                publishedAt
+            }
+        };
+
+        if (existingVideoIndex >= 0) {
+            // Update existing entry
+            user.watchHistory[existingVideoIndex] = {
+                ...watchEntry,
+                watchedAt: new Date() // Update watch time
+            };
+        } else {
+            // Add new entry
+            user.watchHistory.unshift(watchEntry);
+            
+            // Optional: Limit the size of watch history (e.g., keep last 100 videos)
+            if (user.watchHistory.length > 100) {
+                user.watchHistory.pop();
+            }
         }
 
         await user.save();
 
         res.status(200).json({
             success: true,
-            data: user.watchHistory
+            message: 'Watch history updated successfully',
+            watchHistory: user.watchHistory
         });
-      } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Server error' });
+
+    } catch (error) {
+        console.error('Error updating watch history:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Failed to update watch history',
+            error: error.message 
+        });
     }
- 
 };
+
 
 // @desc    Clear watch history
 // @route   DELETE /api/users/history/clear
 // @access  Private
 export const clearWatchHistory = async (req, res) => {
      try {
-        const userId = req.user._id;
+        const { userId } = req.params;
 
-        const updatedUser = await User.findByIdAndUpdate(
+        console.log(userId)
+
+        const updatedUser = await UserModel.findByIdAndUpdate(
             userId,
             { $set: { watchHistory: [] } },
             { new: true, select: '-password' }
@@ -205,7 +332,8 @@ export const clearWatchHistory = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            data: updatedUser.watchHistory
+            data: updatedUser.watchHistory,
+            message: 'History cleared'
         });
       } catch (error) {
         console.error(error);

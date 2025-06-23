@@ -72,11 +72,6 @@ const userSchema = mongoose.Schema(
             }]
         },
         watchHistory: [{
-            videoId: {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: 'Video',
-                required: true
-            },
             watchedAt: {
                 type: Date,
                 default: Date.now
@@ -121,56 +116,3 @@ const userSchema = mongoose.Schema(
 
 /* Model */
 export const UserModel = mongoose.model('User', userSchema);
-
-
-
-/* import mongoose from 'mongoose';
-
-
-const userSchema = mongoose.Schema(
-    {
-        username: {
-            type: String,
-            unique: true,
-            required: [true, "Please enter username"],
-        },
-        name: {
-            type: String,
-            required: [true, "Please enter name"]
-        },
-        lastname: {
-            type: String,
-            required: [true, "Please enter lastname"]
-        },
-        email: {
-            type: String,
-            unique: true,
-            required: [true, "Please enter email"],
-            match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, "Please enter a valid email"]
-        },
-        password: {
-            type: String,
-            required: [true, "Please enter password"]
-        },
-        role: {
-            type: String,
-            enum: ['user', 'admin'],
-            default: 'user'
-        },
-        isActive: {
-            type: Boolean,
-            default: true
-        },
-        isDeleted: {
-            type: Boolean,
-            default: false
-        },       
-       
-    },
-    {
-        timestamps: true
-    }
-)
-
-
-export const UserModel = mongoose.model('User', userSchema); */

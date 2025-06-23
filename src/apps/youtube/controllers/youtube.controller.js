@@ -1,5 +1,6 @@
 import { YoutubeVideoModel } from '../models/youtube.model.js';
 import mongoose from 'mongoose';
+import { UserModel } from '../../user/models/user.model.js';
 
 // @desc    Get videos by type
 // @route   GET /youtube/videos
@@ -66,13 +67,16 @@ export const getVideos = async (req, res) => {
 export const getVideoById = async (req, res) => {
     try {
         let video;
+        let updateQuery;
         
         if (mongoose.Types.ObjectId.isValid(req.params.videoId)) {
             video = await YoutubeVideoModel.findById(req.params.videoId).lean().exec();
+            updateQuery = { _id: req.params.videoId };
         } else {
             video = await YoutubeVideoModel.findOne({ 
                 youtubeVideoId: req.params.videoId 
             }).lean().exec();
+            updateQuery = { youtubeVideoId: req.params.videoId };
         }
         
         if (!video) {
@@ -82,10 +86,17 @@ export const getVideoById = async (req, res) => {
             });
         }
         
+        // Increment views count - use findOneAndUpdate to get the updated document
+        const updatedVideo = await YoutubeVideoModel.findOneAndUpdate(
+            updateQuery,
+            { $inc: { appViews: 1 } },
+            { new: true } // Return the updated document
+        ).lean();
+        
         // Add virtual URL field
         const videoWithUrl = {
-            ...video,
-            url: `https://www.youtube.com/watch?v=${video.youtubeVideoId}`
+            ...updatedVideo,
+            url: `https://www.youtube.com/watch?v=${updatedVideo.youtubeVideoId}`
         };
         
         res.status(200).json({success: true, data: videoWithUrl});
@@ -98,7 +109,6 @@ export const getVideoById = async (req, res) => {
         });
     }
 }
-
 
 export const searchVideos = async (req, res) => {
     try {
@@ -219,6 +229,73 @@ export const getPlaylistVideos = async (req, res) => {
                 totalCount,
                 hasNextPage
             }
+        });
+
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error',
+            error: error.message 
+        });
+    }
+}
+
+
+export const addComment = async (req, res) => {
+    try {
+        const { userId, videoId, text } = req.body;
+
+        // Validate required fields
+        if (!userId || !videoId || !text) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields: userId, videoId, or text'
+            });
+        }
+
+        // Find the video
+        const video = await YoutubeVideoModel.findOne({ youtubeVideoId: videoId });
+        if (!video) {
+            return res.status(404).json({
+                success: false,
+                message: 'Video not found'
+            });
+        }
+
+        // Get user details (assuming you have a User model)
+        const user = await UserModel.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Create new comment
+        const newComment = {
+            userId,
+            text,
+            likes: 0,
+            likedBy: [],
+            replies: [],
+            isEdited: false,
+            isPinned: false,
+        };
+
+        // Add comment to video
+        video.comments.unshift(newComment);
+        video.commentCount = video.comments.length;
+
+        // Save the video with the new comment
+        await video.save();
+
+        // Return success response with the new comment
+        res.status(201).json({
+            success: true,
+            message: 'Comment added successfully',
+            comment: newComment,
+            videoId: video.youtubeVideoId
         });
 
     } catch (error) {

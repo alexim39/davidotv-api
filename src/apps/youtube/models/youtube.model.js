@@ -49,6 +49,11 @@ const youtubeVideoSchema = mongoose.Schema(
       default: 0,
       index: true
     },
+    appViews: {
+      type: Number,
+      default: 0,
+      index: true
+    },
     likes: {
       type: Number,
       default: 0
@@ -122,6 +127,81 @@ const youtubeVideoSchema = mongoose.Schema(
       default: false,
       index: true
     },
+
+    // comments
+    comments: {
+      type: [{
+        _id: {
+          type: mongoose.Schema.Types.ObjectId,
+          auto: true
+        },
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true
+        },
+        text: {
+          type: String,
+          required: true,
+          trim: true,
+          maxlength: 1000
+        },
+        likes: {
+          type: Number,
+          default: 0
+        },
+        likedBy: [{
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User'
+        }],
+        replies: [{
+          // Self-referencing for replies
+          type: mongoose.Schema.Types.ObjectId
+        }],
+        parentComment: {
+          // Reference to parent comment if this is a reply
+          type: mongoose.Schema.Types.ObjectId
+        },
+        isEdited: {
+          type: Boolean,
+          default: false
+        },
+        editHistory: [{
+          text: String,
+          editedAt: Date
+        }],
+        isPinned: {
+          type: Boolean,
+          default: false
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now
+        },
+        updatedAt: {
+          type: Date,
+          default: Date.now
+        }
+      }],
+      default: []
+    },
+
+    // Comment statistics (denormalized for performance)
+    commentStats: {
+      totalComments: {
+        type: Number,
+        default: 0
+      },
+      totalLikes: {
+        type: Number,
+        default: 0
+      },
+      topComments: [{
+        // References to comment _ids within the embedded array
+        type: mongoose.Schema.Types.ObjectId
+      }]
+    }
+
   },
   {
     timestamps: true,
@@ -133,6 +213,7 @@ const youtubeVideoSchema = mongoose.Schema(
 // Indexes for optimized queries
 youtubeVideoSchema.index({ 
   views: -1, 
+  appViews: -1, 
   publishedAt: -1,
   engagementScore: -1 
 });
@@ -179,5 +260,89 @@ youtubeVideoSchema.index({
     tags: 'text',
     channel: 'text' // Add this line
 });
+
+// Update pre-save hook to maintain comment stats
+youtubeVideoSchema.pre('save', function(next) {
+  // Update comment count
+  this.commentStats.totalComments = this.comments.length;
+  
+  // Update total likes
+  this.commentStats.totalLikes = this.comments.reduce((sum, comment) => sum + comment.likes, 0);
+  
+  // Update top comments (most liked, limit to 3)
+  this.commentStats.topComments = [...this.comments]
+    .sort((a, b) => b.likes - a.likes)
+    .slice(0, 3)
+    .map(comment => comment._id);
+  
+  // Update engagement score with comment metrics
+  this.engagementScore = Math.round(
+    (this.views * 0.5) + 
+    (this.likes * 2) + 
+    (this.commentStats.totalComments * 3) +
+    (this.commentStats.totalLikes * 0.5) -
+    (this.dislikes * 1)
+  );
+  
+  next();
+});
+
+// Add method to add a comment
+youtubeVideoSchema.methods.addComment = function(userId, userAvatar, username, text) {
+  const newComment = {
+    userId,
+    userAvatar,
+    username,
+    text,
+    likes: 0,
+    likedBy: [],
+    replies: [],
+    isEdited: false,
+    isPinned: false
+  };
+  
+  this.comments.unshift(newComment); // Add to beginning for newest first
+  return this.save();
+};
+
+// Add method to like a comment
+youtubeVideoSchema.methods.likeComment = function(commentId, userId) {
+  const comment = this.comments.id(commentId);
+  if (!comment) throw new Error('Comment not found');
+  
+  // Check if user already liked
+  const alreadyLiked = comment.likedBy.some(id => id.equals(userId));
+  if (alreadyLiked) {
+    throw new Error('User already liked this comment');
+  }
+  
+  comment.likes += 1;
+  comment.likedBy.push(userId);
+  return this.save();
+};
+
+// Add method to reply to a comment
+youtubeVideoSchema.methods.addReply = function(parentCommentId, userId, userAvatar, username, text) {
+  const parentComment = this.comments.id(parentCommentId);
+  if (!parentComment) throw new Error('Parent comment not found');
+  
+  const newReply = {
+    userId,
+    userAvatar,
+    username,
+    text,
+    likes: 0,
+    likedBy: [],
+    parentComment: parentCommentId,
+    isEdited: false,
+    isPinned: false
+  };
+  
+  const reply = this.comments.create(newReply);
+  this.comments.push(reply);
+  parentComment.replies.push(reply._id);
+  
+  return this.save();
+};
 
 export const YoutubeVideoModel = mongoose.model('YoutubeVideo', youtubeVideoSchema);
