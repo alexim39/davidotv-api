@@ -8,20 +8,18 @@ import { UserModel } from '../../user/models/user.model.js';
 export const getVideos = async (req, res) => {
     try {
         const { menuType, isOfficialContent, limit, page = 0, sort } = req.query;
+        const officialChannelIds = process.env.OFFICIAL_CHANNEL_IDS ? 
+            process.env.OFFICIAL_CHANNEL_IDS.split(',') : 
+            ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA']; // Default fallback
 
         let query = {};
         
         if (menuType === 'music') {
             query = { 
                 isOfficialContent: true,
-                ...(menuType === 'music' && { channelId: 'UCkBV3nBa0iRdxEGc4DUS3xA' })
+                channelId: { $in: officialChannelIds } // Check against all official channels
             };
         } 
-        // else if (menuType === 'trending') {
-        //     query = { 
-        //         engagementScore: { $gt: 5000 } 
-        //     };
-        // }
         else if (menuType === 'trending') {
             query = { 
                 $or: [
@@ -32,8 +30,18 @@ export const getVideos = async (req, res) => {
         }
         else if (menuType === 'videos') {
             query = {
-                isOfficialContent: { $ne: true }
+                isOfficialContent: false,
+                channelId: { $nin: officialChannelIds } // Exclude all official channels
             };
+        }
+
+        // Additional filtering if isOfficialContent is specified
+        if (isOfficialContent === 'true') {
+            query.isOfficialContent = true;
+            query.channelId = { $in: officialChannelIds };
+        } else if (isOfficialContent === 'false') {
+            query.isOfficialContent = false;
+            query.channelId = { $nin: officialChannelIds };
         }
 
         const sortOption = sort || '-publishedAt';
@@ -60,7 +68,6 @@ export const getVideos = async (req, res) => {
     }
 }
 
-
 // @desc    Get single video by ID
 // @route   GET /youtube/videos/:id
 // @access  Public
@@ -68,6 +75,9 @@ export const getVideoById = async (req, res) => {
     try {
         let video;
         let updateQuery;
+        const officialChannelIds = process.env.OFFICIAL_CHANNEL_IDS ? 
+            process.env.OFFICIAL_CHANNEL_IDS.split(',') : 
+            ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA']; // Default fallback
         
         if (mongoose.Types.ObjectId.isValid(req.params.videoId)) {
             video = await YoutubeVideoModel.findById(req.params.videoId).lean().exec();
@@ -86,17 +96,23 @@ export const getVideoById = async (req, res) => {
             });
         }
         
-        // Increment views count - use findOneAndUpdate to get the updated document
+        // Add isOfficial flag based on channel ID
+        const videoWithOfficialFlag = {
+            ...video,
+            isOfficialContent: officialChannelIds.includes(video.channelId)
+        };
+        
+        // Increment views count
         const updatedVideo = await YoutubeVideoModel.findOneAndUpdate(
             updateQuery,
             { $inc: { appViews: 1 } },
-            { new: true } // Return the updated document
+            { new: true }
         ).lean();
         
-        // Add virtual URL field
         const videoWithUrl = {
             ...updatedVideo,
-            url: `https://www.youtube.com/watch?v=${updatedVideo.youtubeVideoId}`
+            url: `https://www.youtube.com/watch?v=${updatedVideo.youtubeVideoId}`,
+            isOfficialContent: officialChannelIds.includes(updatedVideo.channelId)
         };
         
         res.status(200).json({success: true, data: videoWithUrl});
@@ -112,7 +128,10 @@ export const getVideoById = async (req, res) => {
 
 export const searchVideos = async (req, res) => {
     try {
-        const { search, limit = 12, page = 0, sort = '-publishedAt' } = req.query;
+        const { search, limit = 12, page = 0, sort = '-publishedAt', isOfficial } = req.query;
+        const officialChannelIds = process.env.OFFICIAL_CHANNEL_IDS ? 
+            process.env.OFFICIAL_CHANNEL_IDS.split(',') : 
+            ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA'];
 
         if (!search || typeof search !== 'string' || search.trim().length === 0) {
             return res.status(400).json({
@@ -125,9 +144,19 @@ export const searchVideos = async (req, res) => {
         const limitValue = parseInt(limit);
         const skipValue = parseInt(page) * limitValue;
 
+        // Build base query
+        let baseQuery = { $text: { $search: searchQuery } };
+        
+        // Add official content filter if specified
+        if (isOfficial === 'true') {
+            baseQuery.channelId = { $in: officialChannelIds };
+        } else if (isOfficial === 'false') {
+            baseQuery.channelId = { $nin: officialChannelIds };
+        }
+
         // 1. First try text search (if text index exists)
         const videos = await YoutubeVideoModel.find(
-            { $text: { $search: searchQuery } },
+            baseQuery,
             { score: { $meta: "textScore" } }
         )
         .sort({ score: { $meta: "textScore" }, publishedAt: -1 })
@@ -139,38 +168,59 @@ export const searchVideos = async (req, res) => {
         let results = videos;
         if (videos.length === 0) {
             const regex = new RegExp(searchQuery.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i');
-            results = await YoutubeVideoModel.find({
+            
+            let fallbackQuery = {
                 $or: [
                     { title: regex },
                     { description: regex },
                     { tags: regex },
-                    { channel: regex } // Added channel name to search
+                    { channel: regex }
                 ]
-            })
-            .sort(sort)
-            .skip(skipValue)
-            .limit(limitValue)
-            .lean();
+            };
+            
+            // Apply official filter to fallback query if specified
+            if (isOfficial === 'true') {
+                fallbackQuery.channelId = { $in: officialChannelIds };
+            } else if (isOfficial === 'false') {
+                fallbackQuery.channelId = { $nin: officialChannelIds };
+            }
+            
+            results = await YoutubeVideoModel.find(fallbackQuery)
+                .sort(sort)
+                .skip(skipValue)
+                .limit(limitValue)
+                .lean();
         }
 
         // Count total matching documents
-        const total = await YoutubeVideoModel.countDocuments(
-            videos.length > 0 ? 
-            { $text: { $search: searchQuery } } : 
-            { $or: [
+        const countQuery = videos.length > 0 ? baseQuery : {
+            $or: [
                 { title: new RegExp(searchQuery, 'i') },
                 { description: new RegExp(searchQuery, 'i') },
                 { tags: new RegExp(searchQuery, 'i') },
-                { channel: new RegExp(searchQuery, 'i') } // Include channel in count too
-            ]}
-        );
+                { channel: new RegExp(searchQuery, 'i') }
+            ]
+        };
+        
+        // Apply official filter to count query if specified
+        if (isOfficial === 'true') {
+            countQuery.channelId = { $in: officialChannelIds };
+        } else if (isOfficial === 'false') {
+            countQuery.channelId = { $nin: officialChannelIds };
+        }
+
+        const total = await YoutubeVideoModel.countDocuments(countQuery);
+
+        // Add isOfficialContent flag to each result
+        const resultsWithFlags = results.map(v => ({
+            ...v,
+            isOfficialContent: officialChannelIds.includes(v.channelId),
+            url: `https://www.youtube.com/watch?v=${v.youtubeVideoId}`
+        }));
 
         res.status(200).json({
             success: true,
-            data: results.map(v => ({
-                ...v,
-                url: `https://www.youtube.com/watch?v=${v.youtubeVideoId}`
-            })),
+            data: resultsWithFlags,
             meta: {
                 query: searchQuery,
                 count: results.length,
@@ -197,18 +247,29 @@ export const getPlaylistVideos = async (req, res) => {
             page = 1, 
             pageSize = 10, 
             menuType, 
-            sort = '-publishedAt'
+            sort = '-publishedAt',
+            isOfficial 
         } = req.query;
+        
+        const officialChannelIds = process.env.OFFICIAL_CHANNEL_IDS ? 
+            process.env.OFFICIAL_CHANNEL_IDS.split(',') : 
+            ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA'];
 
         const pageNum = Math.max(parseInt(page), 1);
         let pageSizeNum = Math.min(Math.max(parseInt(pageSize), 1), 50);
 
-        const filter = menuType ? { menuTypes: menuType } : {};
+        let filter = menuType ? { menuTypes: menuType } : {};
+        
+        // Add official content filter if specified
+        if (isOfficial === 'true') {
+            filter.channelId = { $in: officialChannelIds };
+        } else if (isOfficial === 'false') {
+            filter.channelId = { $nin: officialChannelIds };
+        }
         
         const totalCount = await YoutubeVideoModel.countDocuments(filter);
         const totalPages = Math.ceil(totalCount / pageSizeNum);
         
-        // More accurate hasNextPage calculation
         const hasNextPage = pageNum < totalPages;
         
         const videos = await YoutubeVideoModel.find(filter)
@@ -219,9 +280,15 @@ export const getPlaylistVideos = async (req, res) => {
             .limit(pageSizeNum)
             .lean();
 
+        // Add isOfficialContent flag to each video
+        const videosWithFlags = videos.map(v => ({
+            ...v,
+            isOfficialContent: officialChannelIds.includes(v.channelId)
+        }));
+
         res.status(200).json({
             success: true,
-            data: videos,
+            data: videosWithFlags,
             pagination: {
                 currentPage: pageNum,
                 pageSize: pageSizeNum,
@@ -241,12 +308,10 @@ export const getPlaylistVideos = async (req, res) => {
     }
 }
 
-
 export const addComment = async (req, res) => {
     try {
         const { userId, videoId, text } = req.body;
 
-        // Validate required fields
         if (!userId || !videoId || !text) {
             return res.status(400).json({
                 success: false,
@@ -254,7 +319,6 @@ export const addComment = async (req, res) => {
             });
         }
 
-        // Find the video
         const video = await YoutubeVideoModel.findOne({ youtubeVideoId: videoId });
         if (!video) {
             return res.status(404).json({
@@ -263,7 +327,6 @@ export const addComment = async (req, res) => {
             });
         }
 
-        // Get user details (assuming you have a User model)
         const user = await UserModel.findById(userId);
         if (!user) {
             return res.status(404).json({
@@ -272,7 +335,6 @@ export const addComment = async (req, res) => {
             });
         }
 
-        // Create new comment
         const newComment = {
             userId,
             text,
@@ -283,14 +345,11 @@ export const addComment = async (req, res) => {
             isPinned: false,
         };
 
-        // Add comment to video
         video.comments.unshift(newComment);
         video.commentCount = video.comments.length;
 
-        // Save the video with the new comment
         await video.save();
 
-        // Return success response with the new comment
         res.status(201).json({
             success: true,
             message: 'Comment added successfully',

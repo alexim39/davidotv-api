@@ -17,7 +17,7 @@ const logger = winston.createLogger({
   ]
 });
 
-// Rate-limited YouTube API client (more conservative limits)
+// Rate-limited YouTube API client
 const youtubeApi = rateLimit(axios.create(), { 
   maxRequests: 50, 
   perMilliseconds: 1000 
@@ -29,10 +29,9 @@ const config = {
     apiKey: process.env.YOUTUBE_API_KEY || 'AIzaSyCnqQosiJ2hFLBMQM691p61f2mkkpg6Q7Y',
     apiUrl: 'https://www.googleapis.com/youtube/v3/search',
     videosUrl: 'https://www.googleapis.com/youtube/v3/videos',
-    channelId: 'UCkBV3nBa0iRdxEGc4DUS3xA',
+    channelIds: ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA'], // Array of official channel IDs
     maxResults: 50,
   },
-  // Production
   cron: {
     trending: '0 */6 * * *',
     music: '0 0 * * *',
@@ -50,17 +49,17 @@ const config = {
     maxRetries: 3,
     retryDelay: 5000,
     trendingPeriodDays: 30,
-    batchSize: 5 // Smaller batch size for better rate limiting
+    batchSize: 5
   }
 };
 
-// Enhanced video data formatter with validation
+// Video data formatter with official content check
 async function formatVideoData(item, videoDetails = {}) {
   if (!item?.id?.videoId || !item?.snippet) {
     throw new Error('Invalid video item format');
   }
 
-  const isOfficial = item.snippet.channelId === config.youtube.channelId;
+  const isOfficial = config.youtube.channelIds.includes(item.snippet.channelId);
   
   return {
     youtubeVideoId: item.id.videoId,
@@ -87,7 +86,7 @@ async function formatVideoData(item, videoDetails = {}) {
   };
 }
 
-// Get complete video details with retry logic
+// Get video details with retry logic
 async function getVideoDetails(videoId, retries = config.app.maxRetries) {
   try {
     const response = await youtubeApi.get(config.youtube.videosUrl, {
@@ -116,13 +115,12 @@ async function getVideoDetails(videoId, retries = config.app.maxRetries) {
   }
 }
 
-// Save videos with proper classification and menuTypes
+// Save videos with classification
 async function saveVideos(videos, menuType) {
   try {
     const bulkOps = [];
     
     for (const video of videos) {
-      // Skip invalid videos
       if (!video.youtubeVideoId) continue;
 
       const update = {
@@ -174,15 +172,13 @@ async function saveVideos(videos, menuType) {
   }
 }
 
-// Determine appropriate menuTypes for each video
+// Determine menu types
 function determineMenuTypes(video, primaryMenuType) {
   const types = [primaryMenuType];
   
-  // Official music should also appear in trending
   if (primaryMenuType === 'music') {
     types.push('trending');
   }
-  // Trending non-official videos should appear in general videos
   else if (primaryMenuType === 'trending' && !video.isOfficialContent) {
     types.push('videos');
   }
@@ -190,13 +186,13 @@ function determineMenuTypes(video, primaryMenuType) {
   return types;
 }
 
-// Process videos in batches with error handling
+// Process videos in batches
 async function processVideosInBatches(items, processor, batchSize = config.app.batchSize) {
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize);
     try {
       await processor(batch);
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Rate limiting
+      await new Promise(resolve => setTimeout(resolve, 1500));
     } catch (error) {
       logger.error(`Error processing batch ${i}-${i + batchSize}: ${error.message}`);
     }
@@ -247,45 +243,50 @@ cron.schedule(config.cron.trending, async () => {
   }
 });
 
-// 2. Music Videos Job
+// 2. Music Videos Job (Official Content)
 cron.schedule(config.cron.music, async () => {
-  logger.info('Starting Music videos update...');
+  logger.info('Starting Music videos update for official channels...');
   
   try {
-    const params = {
-      part: 'snippet',
-      channelId: config.youtube.channelId,
-      type: 'video',
-      maxResults: config.youtube.maxResults,
-      order: 'date',
-      key: config.youtube.apiKey
-    };
-
-    const { data } = await youtubeApi.get(config.youtube.apiUrl, { params });
-    if (!data?.items?.length) {
-      logger.warn('No music videos found in API response');
-      return;
-    }
-
-    await processVideosInBatches(data.items, async (batch) => {
-      const videosWithDetails = await Promise.all(
-        batch.map(async item => {
-          try {
-            const details = await getVideoDetails(item.id.videoId);
-            const videoData = await formatVideoData(item, details);
-            videoData.isOfficialContent = true; // Force official flag
-            return videoData;
-          } catch (error) {
-            logger.error(`Error processing music video ${item.id.videoId}: ${error.message}`);
-            return null;
-          }
-        }).filter(v => v !== null)
-      );
+    for (const channelId of config.youtube.channelIds) {
+      logger.info(`Processing official channel: ${channelId}`);
       
-      await saveVideos(videosWithDetails, 'music');
-    });
+      const params = {
+        part: 'snippet',
+        channelId: channelId,
+        type: 'video',
+        maxResults: config.youtube.maxResults,
+        order: 'date',
+        key: config.youtube.apiKey
+      };
 
-    logger.info(`Music update completed. Processed ${data.items.length} official videos`);
+      const { data } = await youtubeApi.get(config.youtube.apiUrl, { params });
+      if (!data?.items?.length) {
+        logger.warn(`No videos found for channel ${channelId}`);
+        continue;
+      }
+
+      await processVideosInBatches(data.items, async (batch) => {
+        const videosWithDetails = await Promise.all(
+          batch.map(async item => {
+            try {
+              const details = await getVideoDetails(item.id.videoId);
+              const videoData = await formatVideoData(item, details);
+              // Force official content flag for channel-specific videos
+              videoData.isOfficialContent = true;
+              return videoData;
+            } catch (error) {
+              logger.error(`Error processing video ${item.id.videoId}: ${error.message}`);
+              return null;
+            }
+          }).filter(v => v !== null)
+        );
+        
+        await saveVideos(videosWithDetails, 'music');
+      });
+
+      logger.info(`Processed ${data.items.length} videos from channel ${channelId}`);
+    }
   } catch (error) {
     logger.error(`Music update failed: ${error.message}`);
   }
@@ -328,7 +329,7 @@ cron.schedule(config.cron.videos, async () => {
       
       // Filter out official content
       const generalVideos = videosWithDetails.filter(v => 
-        v && v.channelId !== config.youtube.channelId
+        v && !config.youtube.channelIds.includes(v.channelId)
       );
       
       await saveVideos(generalVideos, 'videos');
