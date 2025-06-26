@@ -366,3 +366,113 @@ export const addComment = async (req, res) => {
         });
     }
 }
+
+
+  export const likeVideo = async (req, res) => {
+    try {
+        const { userId, videoId } = req.body;
+
+        console.log('Like Video Request:', { userId, videoId });
+
+        // Find video by youtubeVideoId
+        const video = await YoutubeVideoModel.findOne({ youtubeVideoId: videoId });
+        if (!video) {
+            return res.status(404).json({ success: false, message: 'Video not found' });
+        }
+
+        // Convert userId to ObjectId if needed
+        const userObjectId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
+        // Check if user already liked
+        const userIndex = video.appLikedBy.findIndex(id => id.equals(userObjectId));
+        let liked = false;
+
+        if (userIndex === -1) {
+            // Add like
+            video.appLikedBy.push(userObjectId);
+            video.appLikes += 1;
+
+            // Remove dislike if exists
+            const dislikeIndex = video.appDislikedBy.findIndex(id => id.equals(userObjectId));
+            if (dislikeIndex !== -1) {
+                video.appDislikedBy.splice(dislikeIndex, 1);
+                video.appDislikes -= 1;
+            }
+
+            liked = true;
+        } else {
+            // Remove like
+            video.appLikedBy.splice(userIndex, 1);
+            video.appLikes -= 1;
+        }
+
+        await video.save();
+
+        res.status(200).json({
+            success: true,
+            message: liked ? 'Liked video' : 'Unliked video',
+            liked,
+            disliked: video.appDislikedBy.some(id => id.equals(userObjectId)),
+            appLikes: video.appLikes,
+            appDislikes: video.appDislikes
+        });
+
+    } catch (error) {
+        console.error('Error liking video:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+}
+
+
+  export const dislikeVideo = async (req, res) => {
+    try {
+        const { userId, videoId } = req.body;
+
+        // Find video by youtubeVideoId
+        const video = await YoutubeVideoModel.findOne({ youtubeVideoId: videoId });
+        if (!video) {
+            return res.status(404).json({ success: false, message: 'Video not found' });
+        }
+
+        // Convert userId to ObjectId if needed
+        const userObjectId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
+        // Check if user already disliked
+        const userIndex = video.appDislikedBy.findIndex(id => id.equals(userObjectId));
+        let disliked = false;
+
+        if (userIndex === -1) {
+            // Add dislike
+            video.appDislikedBy.push(userObjectId);
+            video.appDislikes += 1;
+
+            // Remove like if exists
+            const likeIndex = video.appLikedBy.findIndex(id => id.equals(userObjectId));
+            if (likeIndex !== -1) {
+                video.appLikedBy.splice(likeIndex, 1);
+                video.appLikes -= 1;
+            }
+
+            disliked = true;
+        } else {
+            // Remove dislike
+            video.appDislikedBy.splice(userIndex, 1);
+            video.appDislikes -= 1;
+        }
+
+        await video.save();
+
+        res.status(200).json({
+            success: true,
+            message: disliked ? 'Disliked video' : 'Undisliked video',
+            liked: video.appLikedBy.some(id => id.equals(userObjectId)),
+            disliked,
+            appLikes: video.appLikes,
+            appDislikes: video.appDislikes
+        });
+
+    } catch (error) {
+        console.error('Error disliking video:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+}

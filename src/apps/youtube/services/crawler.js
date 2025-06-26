@@ -32,6 +32,7 @@ const config = {
     channelIds: ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA'], // Array of official channel IDs
     maxResults: 50,
   },
+  // Prod
   cron: {
     trending: '0 */6 * * *',
     music: '0 0 * * *',

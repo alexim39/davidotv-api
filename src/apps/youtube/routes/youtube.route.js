@@ -1,5 +1,5 @@
 import express from 'express';
-import {getVideos, getVideoById, searchVideos, getPlaylistVideos, addComment } from '../controllers/youtube.controller.js'
+import {getVideos, getVideoById, searchVideos, getPlaylistVideos, addComment, likeVideo, dislikeVideo } from '../controllers/youtube.controller.js'
 import { fetchAndStoreVideoById } from './../services/fetchAndStoreVideoById.js';
 
 const YoutubeRouter = express.Router();
@@ -8,6 +8,8 @@ YoutubeRouter.get('/videos/playlist', getPlaylistVideos);
 YoutubeRouter.get('/videos/search', searchVideos);
 YoutubeRouter.get('/videos/:videoId', getVideoById);
 YoutubeRouter.patch('/comment/add', addComment);
+YoutubeRouter.post('/videos/like', likeVideo);
+YoutubeRouter.post('/videos/dislike', dislikeVideo);
 
 
 

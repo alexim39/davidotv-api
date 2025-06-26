@@ -44,12 +44,35 @@ const youtubeVideoSchema = mongoose.Schema(
     },
 
     // Engagement Metrics
-    views: {
+
+    // App-Specific Metrics
+    appViews: {
       type: Number,
       default: 0,
       index: true
     },
-    appViews: {
+    appLikes: {
+      type: Number,
+      default: 0,
+      index: true
+    },
+    appDislikes: {
+      type: Number,
+      default: 0,
+      index: true
+    },
+     appLikedBy: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }],
+    appDislikedBy: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }],
+
+    
+    // records from youtube API
+    views: {
       type: Number,
       default: 0,
       index: true
