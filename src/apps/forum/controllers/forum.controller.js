@@ -1,9 +1,10 @@
 import { UserModel } from './../../user/models/user.model.js';
 import { ThreadModel } from './../models/forum.model.js';
 import { CommentModel } from '../models/forum.model.js';
-import mongoose from 'mongoose';
 
-
+/**
+ *  @desc    Create a new forum thread
+ */
 export const createThread = async (req, res) => {
   try {
 
@@ -44,8 +45,9 @@ export const createThread = async (req, res) => {
 };
 
 
-
-
+/**
+* @desc    Get all forum threads with pagination, sorting, and filtering
+ */
 export const getThreads = async (req, res) => {
   try {
     // Pagination parameters
@@ -102,7 +104,9 @@ export const getThreads = async (req, res) => {
 };
 
 
-
+/**
+ * @desc    Get a single thread by ID with comments and replies
+  */
 export const getThreadById = async (req, res) => {
   try {
     const threadId = req.params.id;
@@ -119,10 +123,15 @@ export const getThreadById = async (req, res) => {
       });
     }
 
-    // Get comments with authors populated
+    // Get comments with authors and replies populated
     const comments = await CommentModel.find({ thread: threadId, parentComment: null })
       .populate('author', 'name username avatar')
+      .populate({
+        path: 'replies',
+        populate: { path: 'author', select: 'name username avatar' }
+      })
       .lean();
+
 
     // Increment view count (async without waiting)
     ThreadModel.findByIdAndUpdate(threadId, { $inc: { viewCount: 1 } }).exec();
@@ -147,122 +156,18 @@ export const getThreadById = async (req, res) => {
 
 
 /**
- * @desc    Get all comments for a thread
- * @route   GET /api/forum/threads/:threadId/comments
- * @access  Public
- */
-export const getThreadComments = async (req, res) => {
-    try {
-        const { threadId } = req.params;
-
-        // 1. Validate the thread exists
-        const thread = await ThreadModel.findById(threadId);
-        if (!thread) {
-            return res.status(404).json({
-                success: false,
-                message: 'Thread not found'
-            });
-        }
-
-        // 2. Fetch comments with user details and reply count
-        const comments = await CommentModel.aggregate([
-            // Match only comments for this thread and not deleted
-            { $match: { 
-                thread: new mongoose.Types.ObjectId(threadId),
-                isDeleted: false 
-            }},
-            
-            // Lookup to get author details
-            { $lookup: {
-                from: 'users',
-                localField: 'author',
-                foreignField: '_id',
-                as: 'author',
-                pipeline: [
-                    { $project: { 
-                        name: 1,
-                        username: 1,
-                        avatar: 1
-                    }}
-                ]
-            }},
-            
-            // Unwind the author array (since lookup returns an array)
-            { $unwind: '$author' },
-            
-            // Lookup to count replies
-            { $lookup: {
-                from: 'comments',
-                localField: '_id',
-                foreignField: 'parentComment',
-                as: 'replies'
-            }},
-            
-            // Add fields for reply count and like count
-           /*  { $addFields: {
-                replyCount: { $size: '$replies' },
-                likeCount: { $size: '$likedBy' },
-                // Check if current user liked this comment
-                isLiked: req.user ? { 
-                    $in: [new mongoose.Types.ObjectId(req.user.id), '$likedBy'] 
-                } : false
-            }}, */
-            { $addFields: {
-                replyCount: { $size: { $ifNull: ['$replies', []] } },
-                likeCount: { $size: { $ifNull: ['$likedBy', []] } },
-                isLiked: req.user ? { 
-                    $in: [new mongoose.Types.ObjectId(req.user.id), { $ifNull: ['$likedBy', []] }] 
-                } : false
-            }},
-            
-            // Project only the fields we need
-            { $project: {
-                content: 1,
-                createdAt: 1,
-                updatedAt: 1,
-                'author._id': 1,
-                'author.name': 1,
-                'author.username': 1,
-                'author.avatar': 1,
-                likeCount: 1,
-                replyCount: 1,
-                isLiked: 1
-            }},
-            
-            // Sort by newest first
-            { $sort: { createdAt: -1 } }
-        ]);
-
-        // 3. Return the formatted response
-        res.status(200).json({
-            success: true,
-            count: comments.length,
-            data: comments
-        });
-
-    } catch (error) {
-        console.error('Error fetching comments:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error while fetching comments',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
-};
-
-
-
-
-/**
- * @desc    Add a comment to a thread
+ * @desc    Add a top-level comment to a thread
  * @route   POST /api/forum/threads/:threadId/comments
  * @access  Private
  */
 export const addCommentToThread = async (req, res) => {
   try {
-    const {threadId, content, parentCommentId, authorId } = req.body;
+    // const { threadId } = req.params;
+    // const { content } = req.body;
+    // const authorId = req.user.id;
+    const {threadId, content, authorId } = req.body;
 
-    // 1. Validate the thread exists and is not locked
+    // Validate thread exists and isn't locked
     const thread = await ThreadModel.findById(threadId);
     if (!thread) {
       return res.status(404).json({
@@ -278,48 +183,41 @@ export const addCommentToThread = async (req, res) => {
       });
     }
 
-    // 2. Validate parent comment if this is a reply
-    if (parentCommentId) {
-      const parentComment = await CommentModel.findById(parentCommentId);
-      if (!parentComment || parentComment.thread.toString() !== threadId) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid parent comment'
-        });
-      }
-    }
-
-    // 3. Create the new comment
+    // Create and save comment
     const newComment = new CommentModel({
       content,
       author: authorId,
       thread: threadId,
-      parentComment: parentCommentId || null
+      parentComment: null // Explicitly null for top-level
     });
 
-    // 4. Save the comment
     const savedComment = await newComment.save();
 
-    // 5. Update thread's comment count (unless it's a reply)
-    if (!parentCommentId) {
-      await ThreadModel.findByIdAndUpdate(threadId, {
-        $inc: { commentCount: 1 }
-      });
-    }
+    // Update thread's comment count
+    await ThreadModel.findByIdAndUpdate(threadId, {
+      $inc: { commentCount: 1 },
+      $set: { updatedAt: new Date() }
+    });
 
-    // 6. Update user's forum activity
+    // Update user's forum activity
     await UserModel.findByIdAndUpdate(authorId, {
       $push: { 'forumActivity.comments': savedComment._id }
     });
 
-    // 7. Populate author info before sending response
+    // Populate and return response
     const populatedComment = await CommentModel.findById(savedComment._id)
-      .populate('author', 'name username avatar');
+      .populate('author', 'name username avatar')
+      .lean();
 
     res.status(201).json({
       success: true,
-      data: populatedComment,
-      message: parentCommentId ? 'Reply added successfully' : 'Comment added successfully'
+      data: {
+        ...populatedComment,
+        replyCount: 0,
+        likeCount: 0,
+        isLiked: false
+      },
+      message: 'Comment added successfully'
     });
 
   } catch (error) {
@@ -331,3 +229,151 @@ export const addCommentToThread = async (req, res) => {
     });
   }
 };
+
+
+/**
+ * @desc    Toggle like on a thread
+ * @route   PUT /api/forum/threads/:threadId/like
+ * @access  Private
+ */
+export const toggleThreadLike = async (req, res) => {
+  try {
+    const { threadId, userId } = req.body;
+
+    console.log('Toggling like for thread:', threadId, 'by user:', userId);
+
+    // 1. Validate the thread exists
+    const thread = await ThreadModel.findById(threadId);
+    if (!thread) {
+      return res.status(404).json({
+        success: false,
+        message: 'Thread not found'
+      });
+    }
+
+    // 2. Check if user already liked the thread
+    const user = await UserModel.findById(userId);
+    const alreadyLiked = user.forumActivity.likedThreads.includes(threadId);
+
+    let updatedThread;
+    let updatedUser;
+
+    if (alreadyLiked) {
+      // 3a. Remove like
+      updatedThread = await ThreadModel.findByIdAndUpdate(
+        threadId,
+        {
+          $inc: { likeCount: -1 },
+          $pull: { likedBy: userId }
+        },
+        { new: true }
+      );
+
+      updatedUser = await UserModel.findByIdAndUpdate(
+        userId,
+        {
+          $pull: { 'forumActivity.likedThreads': threadId }
+        },
+        { new: true }
+      );
+    } else {
+      // 3b. Add like
+      updatedThread = await ThreadModel.findByIdAndUpdate(
+        threadId,
+        {
+          $inc: { likeCount: 1 },
+          $addToSet: { likedBy: userId }
+        },
+        { new: true }
+      );
+
+      updatedUser = await UserModel.findByIdAndUpdate(
+        userId,
+        {
+          $addToSet: { 'forumActivity.likedThreads': threadId }
+        },
+        { new: true }
+      );
+    }
+
+    // 4. Get updated like count
+    const likeCount = updatedThread.likeCount;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        threadId,
+        likeCount,
+        isLiked: !alreadyLiked
+      },
+      message: alreadyLiked ? 'Thread unliked successfully' : 'Thread liked successfully'
+    });
+
+  } catch (error) {
+    console.error('Error toggling thread like:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to toggle thread like',
+      error: error.message
+    });
+  }
+};
+
+
+/**
+ * @desc    Add a reply to a comment
+ * @route   POST /api/forum/comments/:commentId/replies
+ * @access  Private
+ */
+// In your backend controller
+export const addCommentReply = async (req, res) => {
+  try {
+    const { content, authorId, commentId } = req.body; // Remove threadId from body
+
+    // 1. Get parent comment and thread ID
+    const parentComment = await CommentModel.findById(commentId);
+    if (!parentComment) {
+      return res.status(404).json({ success: false, message: 'Parent comment not found' });
+    }
+
+    const threadId = parentComment.thread;
+
+    // 2. Create reply with proper parent reference
+    const newReply = new CommentModel({
+      content,
+      author: authorId,
+      thread: threadId,
+      parentComment: commentId,
+      isReply: true // Mark as reply
+    });
+
+    const savedReply = await newReply.save();
+
+    // 3. Update parent comment's replies array
+    await CommentModel.findByIdAndUpdate(commentId, {
+      $push: { replies: savedReply._id },
+      $inc: { replyCount: 1 }
+    });
+
+    // 4. Return populated reply
+    const populatedReply = await CommentModel.findById(savedReply._id)
+      .populate('author', 'name username avatar')
+      .lean();
+
+    res.status(201).json({
+      success: true,
+      data: {
+        ...populatedReply,
+        isReply: true, // Ensure this is set
+        replyCount: 0,
+        likeCount: 0,
+        isLiked: false
+      }
+    });
+
+  } catch (error) {
+    console.error('Error adding reply:', error);
+    res.status(500).json({ success: false, message: 'Failed to add reply' });
+  }
+};
+

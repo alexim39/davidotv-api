@@ -52,7 +52,7 @@ export const signup = async (req, res) => {
         }).collation({ locale: "en", strength: 2 });
 
         if (existingUser) {
-            return res.status(400).json({ success: false, message: "Your profile already exists. Try login" }); // Use 409 Conflict
+            return res.status(400).json({ success: false, message: "This email has signed up before. Try login" }); // Use 409 Conflict
         }
 
         // Validate that password and confirmPassword match
