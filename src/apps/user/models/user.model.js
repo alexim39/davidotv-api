@@ -39,6 +39,10 @@ const userSchema = mongoose.Schema(
             type: Boolean,
             default: false
         },
+        avatar: {
+            type: String,
+            default: 'img/avatar.png'
+        },
         library: {
             savedVideos: [{
                 savedAt: {
@@ -107,8 +111,60 @@ const userSchema = mongoose.Schema(
                 enum: ['light', 'dark', 'system'],
                 default: 'dark'
             }
-        }
-    },
+        },
+
+        // Forum Activity
+        forumActivity: {
+            threads: [{
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Thread'
+            }],
+            comments: [{
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Comment'
+            }],
+            likedThreads: [{
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Thread'
+            }],
+            likedComments: [{
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Comment'
+            }],
+            savedThreads: [{
+                thread: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Thread'
+                },
+                savedAt: {
+                type: Date,
+                default: Date.now
+                }
+            }]
+            },
+            forumPreferences: {
+            notificationSettings: {
+                threadReplies: {
+                type: Boolean,
+                default: true
+                },
+                commentReplies: {
+                type: Boolean,
+                default: true
+                },
+                mentions: {
+                type: Boolean,
+                default: true
+                }
+            },
+            signature: {
+                type: String,
+                maxlength: [100, "Signature cannot exceed 100 characters"],
+                default: ""
+            }
+            }
+        },
+
     {
         timestamps: true
     }
