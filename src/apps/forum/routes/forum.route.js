@@ -3,10 +3,18 @@ import {
     createThread, 
     getThreads, 
     getThreadById, 
-    addCommentToThread,
     toggleThreadLike,
+    getThreadsByTags,
+    deleteThread
+} from '../controllers/thread.controller.js'
+import {
+    addCommentToThread,
     addCommentReply,
-} from '../controllers/forum.controller.js'
+    toggleLikeComment,
+    toggleLikeReply,
+    deleteComment,
+    deleteReply
+} from '../controllers/comment.controller.js';
 const ForumRouter = express.Router();
 
 // add new thread
@@ -22,4 +30,16 @@ ForumRouter.post('/thread/comment/new', addCommentToThread);
 ForumRouter.post('/thread/comment/reply', addCommentReply);
 // like/dislike a thread
 ForumRouter.put('/thread/like', toggleThreadLike);
+// get threads by tag
+ForumRouter.get('/threads/tags/:tags', getThreadsByTags);
+// Toggle like/dislike for a comment
+ForumRouter.post('/comments/like', toggleLikeComment);
+// Toggle like/dislike for a reply
+ForumRouter.post('/comments/reply/like', toggleLikeReply);
+// delete threads by id
+ForumRouter.delete('/thread/:threadId/:userId', deleteThread);
+// delete comment by id
+ForumRouter.delete('/comment/:commentId/:userId', deleteComment);
+// delete reply by id
+ForumRouter.delete('/reply/:replyId/:userId', deleteReply);
 export default ForumRouter;

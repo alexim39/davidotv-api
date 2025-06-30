@@ -62,43 +62,6 @@ const threadSchema = new mongoose.Schema(
   }
 );
 
-/* Comment Schema */
-const commentSchema = new mongoose.Schema(
-  {
-    content: {
-      type: String,
-      required: [true, "Comment content is required"],
-      maxlength: [2000, "Comment cannot exceed 2000 characters"]
-    },
-    author: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    thread: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Thread',
-      required: true
-    },
-    parentComment: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Comment'
-    },
-    likeCount: {
-      type: Number,
-      default: 0
-    },
-    isDeleted: {
-      type: Boolean,
-      default: false
-    }
-  },
-  {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
-  }
-);
 
 /* Thread Virtuals */
 threadSchema.virtual('comments', {
@@ -107,18 +70,10 @@ threadSchema.virtual('comments', {
   foreignField: 'thread'
 });
 
-/* Comment Virtuals */
-commentSchema.virtual('replies', {
-  ref: 'Comment',
-  localField: '_id',
-  foreignField: 'parentComment'
-});
 
 /* Indexes */
 threadSchema.index({ title: 'text', content: 'text' });
 threadSchema.index({ author: 1, createdAt: -1 });
-commentSchema.index({ thread: 1, createdAt: -1 });
-commentSchema.index({ author: 1, createdAt: -1 });
 
 /* Middleware */
 // Update comment count when comments are added/deleted
@@ -137,4 +92,3 @@ threadSchema.pre('deleteOne', { document: true }, async function(next) {
 
 /* Models */
 export const ThreadModel = mongoose.model('Thread', threadSchema);
-export const CommentModel = mongoose.model('Comment', commentSchema);
