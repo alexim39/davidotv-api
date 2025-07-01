@@ -244,7 +244,7 @@ export const toggleLikeComment = async (req, res) => {
  * @route   DELETE /api/forum/comments/:commentId
  * @access  Private
  */
-export const deleteComment = async (req, res) => {
+export const deleteComment_soft = async (req, res) => {
   try {
     const { commentId, userId } = req.params;
 
@@ -294,7 +294,7 @@ export const deleteComment = async (req, res) => {
 /**
  * @desc   Delete a reply (soft delete)
  */
-export const deleteReply = async (req, res) => {
+export const deleteReply_soft = async (req, res) => {
   try {
     const { replyId, userId} = req.params;
 
@@ -365,5 +365,139 @@ export const deleteReply = async (req, res) => {
       message: 'Error deleting reply', 
       error: error.message 
     });
+  }
+};
+
+
+// Hard delete reply
+// This will remove the reply from the database and update the parent comment and thread counts
+export const deleteReply = async (req, res) => {
+  try {
+    const { replyId, userId } = req.params;
+
+    if (!replyId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Reply ID is required' 
+      });
+    }
+
+    // Find the reply and populate the thread reference
+    const reply = await CommentModel.findById(replyId)
+      .populate('thread', 'commentCount');
+    
+    if (!reply) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Reply not found' 
+      });
+    }
+
+    // Check if it's actually a reply
+    if (!reply.parentComment) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'This is not a reply' 
+      });
+    }
+
+    // Authorization check
+    if (!reply.author.equals(userId) && req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Not authorized to delete this reply' 
+      });
+    }
+
+    // Hard delete the reply
+    await CommentModel.deleteOne({ _id: replyId });
+
+    // Remove reply reference from parent comment's replies array
+    await CommentModel.findByIdAndUpdate(
+      reply.parentComment,
+      { $pull: { replies: replyId }, $inc: { replyCount: -1 } }
+    );
+
+    // Update parent thread's comment count
+   /*  await ThreadModel.updateOne(
+      { _id: reply.thread._id },
+      { $inc: { commentCount: -1 } }
+    ); */
+
+    // Remove from user's activity arrays
+    await UserModel.updateOne(
+      { _id: userId },
+      { 
+        $pull: { 
+          'forumActivity.comments': replyId,
+          'forumActivity.likedComments': replyId
+        } 
+      }
+    );
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Reply deleted successfully' 
+    });
+  } catch (error) {
+    console.error('Error deleting reply:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error deleting reply', 
+      error: error.message 
+    });
+  }
+};
+
+// Hard delete comment
+// This will remove the comment from the database and update the thread and user activity counts
+export const deleteComment = async (req, res) => {
+  try {
+    const { commentId, userId } = req.params;
+
+    if (!commentId || !userId) {
+      return res.status(400).json({ success: false, message: 'Comment ID and User ID are required' });
+    }
+
+    // Find the comment
+    const comment = await CommentModel.findById(commentId);
+    if (!comment) {
+      return res.status(404).json({ success: false, message: 'Comment not found' });
+    }
+
+    // Check if the user is the author or an admin
+    if (!comment.author.equals(userId) && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete this comment' });
+    }
+
+    // Hard delete the comment
+    await CommentModel.deleteOne({ _id: commentId });
+
+    // Remove comment from parent's replies array if it's a reply
+    if (comment.parentComment) {
+      await CommentModel.findByIdAndUpdate(
+        comment.parentComment,
+        { $pull: { replies: commentId }, $inc: { replyCount: -1 } }
+      );
+    }
+
+    // Remove all replies to this comment (cascade delete)
+    await CommentModel.deleteMany({ parentComment: commentId });
+
+    // Decrement comment count on the thread
+    await ThreadModel.updateOne(
+      { _id: comment.thread },
+      { $inc: { commentCount: -1 } }
+    );
+
+    // Remove comment from user's forumActivity.comments array
+    await UserModel.updateOne(
+      { _id: userId },
+      { $pull: { 'forumActivity.comments': commentId } }
+    );
+
+    res.status(200).json({ success: true, message: 'Comment deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error deleting comment', error: error.message });
   }
 };
