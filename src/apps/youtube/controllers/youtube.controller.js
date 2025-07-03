@@ -372,7 +372,7 @@ export const addComment = async (req, res) => {
     try {
         const { userId, videoId } = req.body;
 
-        console.log('Like Video Request:', { userId, videoId });
+        //console.log('Like Video Request:', { userId, videoId });
 
         // Find video by youtubeVideoId
         const video = await YoutubeVideoModel.findOne({ youtubeVideoId: videoId });

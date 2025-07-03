@@ -10,6 +10,7 @@ import YoutubeRouter from './src/apps/youtube/index.js';
 import EmailSubscriptionRouter from './src/apps/email-subscription/index.js';
 import UserRouter from './src/apps/user/index.js';
 import ForumRouter from './src/apps/forum/index.js';
+import EventRouter from './src/apps/event/index.js';
 
 
 const port = process.env.PORT || 3000;
@@ -35,6 +36,7 @@ app.use('/email', EmailSubscriptionRouter);
 app.use('/youtube', YoutubeRouter);
 app.use('/user', UserRouter);
 app.use('/forum', ForumRouter);
+app.use('/event', EventRouter);
 
 
 /* DB connection */
