@@ -19,6 +19,10 @@ const contactSchema = mongoose.Schema(
             //unique: true,
             required: [true, "Please enter email address"]
         },
+        reason: {
+            type: String,
+            required: [true, "Please enter reason"]
+        },
         subject: {
             type: String,
             //unique: true,

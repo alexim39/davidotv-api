@@ -1,7 +1,6 @@
-import {ContactModel, GuideDownloadModel} from '../models/contact.model.js';
+import {ContactModel} from '../models/contact.model.js';
 import { sendEmail } from "../../../services/emailService.js";
 import { ownerContactEmailTemplate } from '../services/email/ownerTemplate.js';
-import { userGuideTemplate } from '../services/email/userGuideTemplate.js';
 import { userContactEmailTemplate } from '../services/email/userTemplate.js';
 
 
@@ -24,6 +23,7 @@ export const ContactController = async (req, res) => {
         const contactObject = await ContactModel.create({
             name: req.body.name,
             surname: req.body.surname,
+            reason: req.body.reason,
             email: req.body.email,
             subject: req.body.subject,
             message: req.body.message,
@@ -31,56 +31,24 @@ export const ContactController = async (req, res) => {
         });
 
         // Send email to form owner
-        const ownerSubject = 'MarketSpase Support Request';
+        const ownerSubject = 'DavidoTV Contact Request';
         const ownerMessage = ownerContactEmailTemplate(contactObject);
-        const ownerEmails = ['ago.fnc@gmail.com'];
+        const ownerEmails = ['ago.fnc@gmail.com', 'contact@davidotv.com'];
         await Promise.all(ownerEmails.map(email => sendEmail(email, ownerSubject, ownerMessage)));
 
         // Send email to the user
-        const userSubject = `MarketSpase Support Request - ${requestID}`;
+        const userSubject = `DavidoTV Contact Request - ${requestID}`;
         const userMessage = userContactEmailTemplate(contactObject);
-        const receiverEmails = [contactObject.email, 'contacts@marketspase.com'];
+        const receiverEmails = [contactObject.email, ];
         await Promise.all(receiverEmails.map(email => sendEmail(email, userSubject, userMessage)));
 
-        res.status(200).json({data: contactObject, success: true, message: "Contact form submitted successfully."});
+        res.status(200).json({data: contactObject, success: true, message: "Request submitted successfully, you will be contacted soon"});
 
     } catch (error) {
         console.error(error.message);
         res.status(500).json({
             message: 'internal server error',
             success: false,
-        })
-    }
-}
-
-
-
-// User download contnroller
-export const GuideDownloadController = async (req, res) => {
-    try {
-
-        //console.log('sent==',req.body);
-
-        const downloadObject = await GuideDownloadModel.create({
-            name: req.body.name,
-            surname: req.body.surname,
-            email: req.body.email,
-            userDevice: req.body.userDevice,
-            username: req.body.username,
-        });  
-
-        // Send email to form owner
-        const ownerSubject = 'MarketSpase Business Guide Download';
-        const ownerMessage = userGuideTemplate(downloadObject);
-        const ownerEmails = ['ago.fnc@gmail.com'];
-        await Promise.all(ownerEmails.map(email => sendEmail(email, ownerSubject, ownerMessage)));
-
-        res.status(200).json(downloadObject);
-
-    } catch (error) {
-        console.error(error.message);
-        res.status(500).json({
-            message: error.message
         })
     }
 }
