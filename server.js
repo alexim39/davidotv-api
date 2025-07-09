@@ -12,6 +12,7 @@ import UserRouter from './src/apps/user/index.js';
 import ForumRouter from './src/apps/forum/index.js';
 import EventRouter from './src/apps/event/index.js';
 import ContactRouter from './src/apps/contact/index.js';
+import PlaylistRouter from './src/apps/playlist/index.js';
 
 
 const port = process.env.PORT || 3000;
@@ -39,6 +40,7 @@ app.use('/user', UserRouter);
 app.use('/forum', ForumRouter);
 app.use('/event', EventRouter);
 app.use('/contact', ContactRouter);
+app.use('/playlist', PlaylistRouter);
 
 
 /* DB connection */

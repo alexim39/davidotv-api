@@ -59,21 +59,21 @@ const userSchema = mongoose.Schema(
                     publishedAt: Date
                 }
             }],
-            playlists: [{
-                playlistId: {
-                    type: mongoose.Schema.Types.ObjectId,
-                    ref: 'Playlist'
-                },
-                name: String,
-                videos: [{
-                    type: mongoose.Schema.Types.ObjectId,
-                    ref: 'Video'
-                }],
-                createdAt: {
-                    type: Date,
-                    default: Date.now
-                }
-            }]
+            // playlists: [{
+            //     playlistId: {
+            //         type: mongoose.Schema.Types.ObjectId,
+            //         ref: 'Playlist'
+            //     },
+            //     name: String,
+            //     videos: [{
+            //         type: mongoose.Schema.Types.ObjectId,
+            //         ref: 'Video'
+            //     }],
+            //     createdAt: {
+            //         type: Date,
+            //         default: Date.now
+            //     }
+            // }]
         },
         watchHistory: [{
             watchedAt: {

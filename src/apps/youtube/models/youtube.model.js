@@ -70,7 +70,6 @@ const youtubeVideoSchema = mongoose.Schema(
       ref: 'User'
     }],
 
-    
     // records from youtube API
     views: {
       type: Number,
