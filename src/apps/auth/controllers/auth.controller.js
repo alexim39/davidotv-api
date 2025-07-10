@@ -70,7 +70,7 @@ export const signup = async (req, res) => {
         //Send email to form owner
         const ownerSubject = 'New DavidoTV Sign Up';
         const ownerMessage = ownerEmailTemplate(newUser);
-        const ownerEmails = ['ago.fnc@gmail.com'];
+        const ownerEmails = ['alex.imenwo@yahoo.com'];
         await Promise.all(ownerEmails.map(email => sendEmail(email, ownerSubject, ownerMessage)));
 
         //Send welcome email to the user
