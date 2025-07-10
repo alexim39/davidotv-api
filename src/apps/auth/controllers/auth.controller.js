@@ -76,7 +76,7 @@ export const signup = async (req, res) => {
         //Send welcome email to the user
         const userSubject = 'Welcome to DavidoTV';
         const userMessage = userWelcomeEmailTemplate(newUser);
-        await sendEmail(surveyRecord.email, userSubject, userMessage);
+        await sendEmail(newUser.email, userSubject, userMessage);
 
         // Exclude password from the response
         const { password: _, ...userObject } = newUser.toJSON();
