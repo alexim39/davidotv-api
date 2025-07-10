@@ -7,22 +7,10 @@ import jwt from "jsonwebtoken";
 import { userAccountActivationEmailTemplate } from "../services/email/userActivationTemplate.js";
 import dotenv  from "dotenv"
 dotenv.config()
-import { generateUniqueUsername } from '../services/username-generator.js'; // Adjust path as needed
+import { generateUniqueUsername } from '../services/username-generator.js'; 
+import { ownerEmailTemplate } from '../services/email/ownerTemplate.js'; 
+import { userWelcomeEmailTemplate } from '../services/email/userWelcomeTemplate.js';
 
-// Check if a partner exists
-/* export const checkPartnerUsername = async (req, res) => {
-  const { username } = req.params;
-  const partner = await UserModel.findOne({ username });
-
-  if (partner) {
-    return res.status(200).json({success: true, user: partner});
-  }
-
-  res.status(404).json({
-    message: "Username not found",
-    success: false, 
-  });
-}; */
 
 /**
  * Handles prospect sign up form submissions.
@@ -79,16 +67,16 @@ export const signup = async (req, res) => {
 
         await newUser.save();
 
-        // Send email to form owner
-        // const ownerSubject = 'New DavidoTV Sign Up';
-        // const ownerMessage = ownerEmailTemplate(newUser);
-        // const ownerEmails = ['ago.fnc@gmail.com'];
-        // await Promise.all(ownerEmails.map(email => sendEmail(email, ownerSubject, ownerMessage)));
+        //Send email to form owner
+        const ownerSubject = 'New DavidoTV Sign Up';
+        const ownerMessage = ownerEmailTemplate(newUser);
+        const ownerEmails = ['ago.fnc@gmail.com'];
+        await Promise.all(ownerEmails.map(email => sendEmail(email, ownerSubject, ownerMessage)));
 
-        // Send welcome email to the user
-        // const userSubject = 'Welcome to DavidoTV';
-        // const userMessage = userWelcomeEmailTemplate(newUser);
-        // await sendEmail(surveyRecord.email, userSubject, userMessage);
+        //Send welcome email to the user
+        const userSubject = 'Welcome to DavidoTV';
+        const userMessage = userWelcomeEmailTemplate(newUser);
+        await sendEmail(surveyRecord.email, userSubject, userMessage);
 
         // Exclude password from the response
         const { password: _, ...userObject } = newUser.toJSON();
