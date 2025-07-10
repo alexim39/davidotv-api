@@ -6,7 +6,7 @@ const transporter = nodemailer.createTransport({
   secure: true,
   port: 465,
   auth: {
-    user: 'contact@davidotv.com', // your email
+    user: 'alex.i@davidotv.com', // your email
     pass: process.env.EMAILPASS, // stored in environment variables
   },
 });
