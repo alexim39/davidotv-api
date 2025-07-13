@@ -142,7 +142,7 @@ const userSchema = mongoose.Schema(
                 }
             }]
             },
-            forumPreferences: {
+        forumPreferences: {
             notificationSettings: {
                 threadReplies: {
                 type: Boolean,
@@ -162,8 +162,18 @@ const userSchema = mongoose.Schema(
                 maxlength: [100, "Signature cannot exceed 100 characters"],
                 default: ""
             }
-            }
         },
+        resetToken: {
+            // Add resetToken field
+            type: String,
+            default: undefined,
+        },
+            resetTokenExpiry: {
+            // add resetTokenExpiry field
+            type: Date,
+            default: undefined,
+        },
+    },
 
     {
         timestamps: true

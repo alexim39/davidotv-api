@@ -155,7 +155,7 @@ export const getUser = async (req, res) => {
     } else if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ success: false, message: "User unauthenticated: Invalid JWT" });
     }
-    console.error("Error getting partner:", error);
+    console.error("Error getting user:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
@@ -228,58 +228,103 @@ export const activateAccount = async (req, res) => {
 export const forgotPassword = async (req, res) => {
     try {
       const { email } = req.body;
-      const partner = await UserModel.findOne({ email });
-  
-      if (!partner) {
-        return res.json({ success: true, message: 'If the email is registered, a password reset link has been sent' });
+      const user = await UserModel.findOne({ email });
+
+      if (!user) {
+        return res.status(404).json({ success: true, message: 'If the email is registered, a password reset link has been sent' });
       }
   
       const resetToken = crypto.randomBytes(20).toString('hex');
       const resetTokenExpiry = Date.now() + 3600000; // 1 hour
   
-      partner.resetToken = resetToken;
-      partner.resetTokenExpiry = resetTokenExpiry;
-      await partner.save();
+      user.resetToken = resetToken;
+      user.resetTokenExpiry = resetTokenExpiry;
+      await user.save();
+
+      //console.log('user ',user)
 
     // Send email to the user
-    const userSubject = "Password Reset Link - MarketSpase";
-    const userMessage = userPasswordResetLinkEmailTemplate(partner);
-    await sendEmail(partner.email, userSubject, userMessage);
+    const userSubject = "Password Reset Link - DavidoTV";
+    const userMessage = userPasswordResetLinkEmailTemplate(user);
+    await sendEmail(user.email, userSubject, userMessage);
   
-      res.json({ success: true, message: 'Password reset email sent.' });
+    res.json({ success: true, message: 'Password reset email sent.' });
+
     } catch (error) {
       console.error('Forgot password error:', error);
       res.status(500).json({ success: false, message: 'An error occurred.' });
     }
 };
 
-  
+// reset password for user who forgot their password
 export const resetPassword = async (req, res) => {
   try {
     const { password, token } = req.body;
-    const partner = await UserModel.findOne({
+
+    // Validate input
+    if (!password || !token) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Password and token are required.' 
+      });
+    }
+
+    // Check password length (matches frontend validation)
+    if (password.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Password must be at least 6 characters.' 
+      });
+    }
+
+    // Find user with valid token
+    const user = await UserModel.findOne({
       resetToken: token,
       resetTokenExpiry: { $gt: Date.now() },
     });
 
-    if (!partner) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired token.' });
+    if (!user) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid or expired token. Please request a new password reset.' 
+      });
     }
 
+    // Hash new password
     const hashedPassword = await bcrypt.hash(password, 10);
-    partner.password = hashedPassword;
-    partner.resetToken = undefined;
-    partner.resetTokenExpiry = undefined;
-    await partner.save();
+    
+    // Update user
+    user.password = hashedPassword;
+    user.resetToken = undefined;
+    user.resetTokenExpiry = undefined;
+    await user.save();
 
-    res.status(200).json({ success: true, message: 'Password reset successfully.' });
+    // Return success response
+    res.status(200).json({ 
+      success: true, 
+      message: 'Password changed successfully! You can now sign in with your new password.' 
+    });
+
   } catch (error) {
     console.error('Reset password error:', error);
-    res.status(500).json({ success: false, message: 'An error occurred.' });
+    
+    // Handle rate limiting or other specific errors
+    if (error.message.includes('rate limit')) {
+      return res.status(429).json({ 
+        success: false, 
+        message: 'Too many requests. Please try again later.' 
+      });
+    }
+
+    // Generic error response
+    res.status(500).json({ 
+      success: false, 
+      message: 'An error occurred while resetting your password. Please try again later.' 
+    });
   }
 };
 
-// Change a partner's password
+// Change a user's password
 export const changePassword = async (req, res) => {
   const { id, currentPassword, newPassword } = req.body;
 
@@ -290,10 +335,10 @@ export const changePassword = async (req, res) => {
     });
   }
 
-  if (newPassword.length < 8) {
+  if (newPassword.length < 6) {
     return res.status(402).json({
       success: false,
-      message: "New password must be at least 8 characters long.",
+      message: "New password must be at least 6 characters long.",
     });
   }
 
@@ -305,15 +350,15 @@ export const changePassword = async (req, res) => {
   }
 
   try {
-    const partner = await UserModel.findById(id);
-    if (!partner) {
+    const user = await UserModel.findById(id);
+    if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found.",
       });
     }
 
-    const isMatch = await bcrypt.compare(currentPassword, partner.password);
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -324,8 +369,8 @@ export const changePassword = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedNewPassword = await bcrypt.hash(newPassword, salt);
 
-    partner.password = hashedNewPassword;
-    await partner.save();
+    user.password = hashedNewPassword;
+    await user.save();
 
     res.status(200).json({
       success: true,
