@@ -379,8 +379,7 @@ export const getUserEventInterest = async (req, res) => {
   }
 }
 
-
-
+// get all event sorted by date - oldest first
 export const getAllEvents = async (req, res) => {
   try {
     const events = await EventModel.find({})

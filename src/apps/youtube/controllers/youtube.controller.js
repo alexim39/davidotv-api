@@ -80,12 +80,32 @@ export const getVideoById = async (req, res) => {
             ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA']; // Default fallback
         
         if (mongoose.Types.ObjectId.isValid(req.params.videoId)) {
-            video = await YoutubeVideoModel.findById(req.params.videoId).lean().exec();
+            video = await YoutubeVideoModel.findById(req.params.videoId)
+                .populate({
+                    path: 'comments.userId',
+                    select: 'username name lastname avatar' // Only include necessary fields
+                })
+                .populate({
+                    path: 'comments.likedBy',
+                    select: 'username avatar' // Only include necessary fields
+                })
+                .lean()
+                .exec();
             updateQuery = { _id: req.params.videoId };
         } else {
             video = await YoutubeVideoModel.findOne({ 
                 youtubeVideoId: req.params.videoId 
-            }).lean().exec();
+            })
+            .populate({
+                path: 'comments.userId',
+                select: 'username name lastname avatar'
+            })
+            .populate({
+                path: 'comments.likedBy',
+                select: 'username avatar'
+            })
+            .lean()
+            .exec();
             updateQuery = { youtubeVideoId: req.params.videoId };
         }
         
@@ -93,6 +113,31 @@ export const getVideoById = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: 'Video not found'
+            });
+        }
+        
+        // Process comments to include user details
+        if (video.comments && video.comments.length > 0) {
+            video.comments = video.comments.map(comment => {
+                const user = comment.userId; // This is now populated
+                const likedByUsers = comment.likedBy || []; // These are now populated
+                
+                return {
+                    ...comment,
+                    user: { // Flatten the user object for easier access
+                        _id: user?._id,
+                        username: user?.username,
+                        name: user?.name,
+                        lastname: user?.lastname,
+                        avatar: user?.avatar
+                    },
+                    likedBy: likedByUsers.map(user => ({
+                        _id: user._id,
+                        username: user.username,
+                        avatar: user.avatar
+                    })),
+                    userId: undefined // Remove the original userId field
+                };
             });
         }
         
@@ -107,7 +152,41 @@ export const getVideoById = async (req, res) => {
             updateQuery,
             { $inc: { appViews: 1 } },
             { new: true }
-        ).lean();
+        )
+        .populate({
+            path: 'comments.userId',
+            select: 'username name lastname avatar'
+        })
+        .populate({
+            path: 'comments.likedBy',
+            select: 'username avatar'
+        })
+        .lean();
+        
+        // Process comments for the updated video as well
+        if (updatedVideo.comments && updatedVideo.comments.length > 0) {
+            updatedVideo.comments = updatedVideo.comments.map(comment => {
+                const user = comment.userId;
+                const likedByUsers = comment.likedBy || [];
+                
+                return {
+                    ...comment,
+                    user: {
+                        _id: user?._id,
+                        username: user?.username,
+                        name: user?.name,
+                        lastname: user?.lastname,
+                        avatar: user?.avatar
+                    },
+                    likedBy: likedByUsers.map(user => ({
+                        _id: user._id,
+                        username: user.username,
+                        avatar: user.avatar
+                    })),
+                    userId: undefined
+                };
+            });
+        }
         
         const videoWithUrl = {
             ...updatedVideo,
