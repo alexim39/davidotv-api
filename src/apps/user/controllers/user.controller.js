@@ -1,5 +1,6 @@
 import { YoutubeVideoModel } from './../../youtube/models/youtube.model.js';
 import { UserModel } from './../models/user.model.js';
+import mongoose from 'mongoose';
 
 // @desc    Save video to user's library
 // @route   POST /api/users/library/save
@@ -135,7 +136,6 @@ export const removeVideoFromLibrary = async (req, res) => {
         });
     }
 };
-
 
 // @desc    Get user's watch history
 // @route   GET /api/users/:userId/history
@@ -314,7 +314,6 @@ export const updateWatchHistory = async (req, res) => {
     }
 };
 
-
 // @desc    Clear watch history
 // @route   DELETE /api/users/history/clear
 // @access  Private
@@ -340,4 +339,242 @@ export const clearWatchHistory = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server error' });
     }
   
+};
+
+/**
+ * Update user's personal information
+ * @param req Express request
+ * @param res Express response
+ */
+export const updatePersonalInfo = async (req, res) => {
+    try {
+        const { 
+            userId,
+            name, 
+            lastname, 
+            phone,
+            address,
+            bio,
+            dob
+        } = req.body;
+
+        // Validate required fields
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'User ID is required'
+            });
+        }
+
+        // Prepare update object
+        const updateData = {};
+        
+        // Update top-level fields if provided
+        if (name) updateData.name = name;
+        if (lastname) updateData.lastname = lastname;
+        
+        // Update personalInfo fields if provided
+        updateData.personalInfo = {};
+        if (phone) updateData.personalInfo.phone = phone;
+        if (address) updateData.personalInfo.address = address;
+        if (bio) updateData.personalInfo.bio = bio;
+        if (dob) updateData.personalInfo.dob = new Date(dob);
+
+        // Find and update the user
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            userId,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        ).select('-password -resetToken -resetTokenExpiry');
+
+        if (!updatedUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'Personal information updated successfully',
+        });
+
+    } catch (error) {
+        console.error('Error updating personal information:', error);
+
+        // Handle Mongoose validation errors
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Validation error',
+                error: error.message 
+            });
+        }
+
+        return res.status(500).json({ 
+            success: false, 
+            message: 'Internal server error occurred while updating profile',
+            error: error.message 
+        });
+    }
+}
+
+
+/**
+ * Update user's professional information
+ * @param req Express request
+ * @param res Express response
+ */
+export const updateProfessioinalInfo = async (req, res) => {
+    try {
+        const { jobTitle, educationBackground, hobbies, skills, userId } = req.body;
+
+        // Validate required fields
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'User ID is required'
+            });
+        }
+
+        // Find and update the user
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            userId,
+            {
+                $set: {
+                    'personalInfo.jobTitle': jobTitle,
+                    'personalInfo.educationBackground': educationBackground,
+                    'professionalInfo.skills': skills,
+                    'interests.hobbies': hobbies
+                }
+            },
+            { new: true, runValidators: true }
+        ).select('-password -resetToken -resetTokenExpiry');
+
+        if (!updatedUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'Professional information updated successfully',
+        });
+
+    } catch (error) {
+        console.error('Error updating professional information:', error);
+        return res.status(500).json({ 
+            success: false, 
+            message: 'Internal server error',
+            error: error.message 
+        });
+    }
+}
+
+
+/**
+ * Update user's username
+ * @param req Express request
+ * @param res Express response
+ */
+export const updateUsername = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const { id, username } = req.body;
+
+        // Validate input
+        if (!username || !id) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({
+                success: false, 
+                message: "Username and ID are required."
+            });
+        }
+
+        // Validate username format
+        const usernameRegex = /^[a-zA-Z0-9_]+$/;
+        if (!usernameRegex.test(username)) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({
+                success: false, 
+                message: "Username can only contain letters, numbers, and underscores."
+            });
+        }
+
+        // Check username length
+        if (username.length < 3 || username.length > 30) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({
+                success: false,
+                message: "Username must be between 3 and 30 characters long."
+            });
+        }
+
+        // Check if username already exists (case insensitive)
+        const existingUser = await UserModel.findOne({ 
+            username: { $regex: new RegExp(`^${username}$`, 'i') },
+            _id: { $ne: id }
+        }).session(session);
+
+        if (existingUser) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(409).json({ 
+                success: false, 
+                message: "Username already in use by another user." 
+            });
+        }
+
+        // Update the user
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            id,
+            { $set: { username } },
+            { new: true, runValidators: true, session }
+        ).select('-password -resetToken -resetTokenExpiry');
+
+        if (!updatedUser) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(404).json({
+                success: false, 
+                message: "User not found."
+            });
+        }
+
+        await session.commitTransaction();
+        session.endSession();
+
+        return res.status(200).json({
+            success: true, 
+            message: "Username updated successfully!",
+            data: updatedUser
+        });
+
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        
+        console.error('Error updating username:', error);
+        
+        // Handle specific Mongoose validation errors
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({
+                success: false,
+                message: error.message
+            });
+        }
+
+        return res.status(500).json({
+            success: false, 
+            message: "Internal server error",
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
 };

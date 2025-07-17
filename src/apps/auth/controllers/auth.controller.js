@@ -256,7 +256,7 @@ export const forgotPassword = async (req, res) => {
     }
 };
 
-// reset password for user who forgot their password
+// change password for user who forgot their password
 export const resetPassword = async (req, res) => {
   try {
     const { password, token } = req.body;
@@ -384,3 +384,4 @@ export const changePassword = async (req, res) => {
     });
   }
 };
+

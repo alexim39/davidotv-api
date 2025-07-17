@@ -6,12 +6,19 @@ import {
     getWatchHistory, 
     updateWatchHistory, 
     removeFromWatchedHistory,
-    clearWatchHistory
+    clearWatchHistory,
+    updatePersonalInfo,
+    updateProfessioinalInfo,
+    updateUsername
 } from '../controllers/user.controller.js'
 
 const UserRouter = express.Router();
 
 UserRouter.post('/library/save', saveVideoToLibrary);
+UserRouter.put('/profile/personal', updatePersonalInfo);
+UserRouter.put('/profile/profession', updateProfessioinalInfo);
+UserRouter.put('/profile/username', updateUsername);
+//UserRouter.put('/profile/password', updatePersonalInfo);
 UserRouter.get('/library/:userId', getSavedVideos);
 UserRouter.delete('/library/remove/:userId/:youtubeVideoId', removeVideoFromLibrary);
 

@@ -26,6 +26,63 @@ const userSchema = mongoose.Schema(
             type: String,
             required: [true, "Please enter password"]
         },
+        
+        // Personal Information Section
+        personalInfo: {
+            address: {
+                type: String,
+            },
+            phone: {
+                type: String,
+            },
+            dob: {
+                type: Date,
+            },
+            bio: {
+                type: String,
+            },
+            jobTitle: {
+                type: String,
+            },
+            educationBackground: {
+                type: String,
+            }
+        },
+
+        // Professional Information Section
+        professionalInfo: {
+            skills: [{
+                type: String
+            }],
+            experience: [{
+                jobTitle: String,
+                company: String,
+                startDate: Date,
+                endDate: Date,
+                description: String,
+                current: Boolean
+            }],
+            education: [{
+                institution: String,
+                degree: String,
+                fieldOfStudy: String,
+                startDate: Date,
+                endDate: Date,
+                description: String
+            }]
+        },
+
+        // Personal Interests Section
+        interests: {
+            hobbies: [{
+                type: String
+            }],
+            favoriteTopics: [{
+                type: String
+            }]
+        },
+
+        // Rest of the existing schema remains the same
         role: {
             type: String,
             enum: ['user', 'admin'],
@@ -49,7 +106,6 @@ const userSchema = mongoose.Schema(
                     type: Date,
                     default: Date.now
                 },
-                // Additional metadata about the saved video
                 videoData: {
                     youtubeVideoId: String,
                     title: String,
@@ -59,21 +115,6 @@ const userSchema = mongoose.Schema(
                     publishedAt: Date
                 }
             }],
-            // playlists: [{
-            //     playlistId: {
-            //         type: mongoose.Schema.Types.ObjectId,
-            //         ref: 'Playlist'
-            //     },
-            //     name: String,
-            //     videos: [{
-            //         type: mongoose.Schema.Types.ObjectId,
-            //         ref: 'Video'
-            //     }],
-            //     createdAt: {
-            //         type: Date,
-            //         default: Date.now
-            //     }
-            // }]
         },
         watchHistory: [{
             watchedAt: {
@@ -86,7 +127,6 @@ const userSchema = mongoose.Schema(
                 max: 100,
                 default: 0
             },
-            // Additional metadata about the watched video
             videoData: {
                 youtubeVideoId: String,
                 title: String,
@@ -112,8 +152,6 @@ const userSchema = mongoose.Schema(
                 default: 'dark'
             }
         },
-
-        // Forum Activity
         forumActivity: {
             threads: [{
                 type: mongoose.Schema.Types.ObjectId,
@@ -141,7 +179,7 @@ const userSchema = mongoose.Schema(
                 default: Date.now
                 }
             }]
-            },
+        },
         forumPreferences: {
             notificationSettings: {
                 threadReplies: {
@@ -164,17 +202,14 @@ const userSchema = mongoose.Schema(
             }
         },
         resetToken: {
-            // Add resetToken field
             type: String,
             default: undefined,
         },
-            resetTokenExpiry: {
-            // add resetTokenExpiry field
+        resetTokenExpiry: {
             type: Date,
             default: undefined,
         },
     },
-
     {
         timestamps: true
     }
