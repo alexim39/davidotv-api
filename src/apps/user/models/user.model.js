@@ -10,45 +10,66 @@ const userSchema = mongoose.Schema(
         },
         name: {
             type: String,
+            trim: true,
             required: [true, "Please enter name"]
         },
         lastname: {
             type: String,
+            trim: true,
             required: [true, "Please enter lastname"]
         },
         email: {
             type: String,
             unique: true,
+            trim: true,
             required: [true, "Please enter email"],
             match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, "Please enter a valid email"]
         },
         password: {
             type: String,
+            trim: true,
             required: [true, "Please enter password"]
         },
-        
         // Personal Information Section
         personalInfo: {
             address: {
-                type: String,
+                street: { 
+                    type: String,
+                    trim: true 
+                },
+                city: { 
+                    type: String,
+                    trim: true
+                },
+                state: { 
+                    type: String,
+                    trim: true
+                },
+                country: { 
+                    type: String,
+                    trim: true
+                }
             },
             phone: {
                 type: String,
+                trim: true
             },
             dob: {
                 type: Date,
+                trim: true
             },
             bio: {
                 type: String,
+                trim: true
             },
             jobTitle: {
                 type: String,
+                trim: true
             },
             educationBackground: {
                 type: String,
             }
         },
-
         // Professional Information Section
         professionalInfo: {
             skills: [{
@@ -71,7 +92,6 @@ const userSchema = mongoose.Schema(
                 description: String
             }]
         },
-
         // Personal Interests Section
         interests: {
             hobbies: [{
@@ -81,7 +101,6 @@ const userSchema = mongoose.Schema(
                 type: String
             }]
         },
-
         // Rest of the existing schema remains the same
         role: {
             type: String,
@@ -150,7 +169,11 @@ const userSchema = mongoose.Schema(
                 type: String,
                 enum: ['light', 'dark', 'system'],
                 default: 'dark'
-            }
+            },
+            notification: {
+                type: Boolean,
+                default: true
+            },
         },
         forumActivity: {
             threads: [{
@@ -208,6 +231,44 @@ const userSchema = mongoose.Schema(
         resetTokenExpiry: {
             type: Date,
             default: undefined,
+        },
+        testimonial: {
+            message: {
+                type: String,
+                maxlength: [500, "Testimonial cannot exceed 500 characters"],
+                trim: true
+            },
+            // country: {
+            //     type: String,
+            //     trim: true
+            // },
+            // state: {
+            //     type: String,
+            //     trim: true
+            // },
+            status: {
+                type: String,
+                enum: ['pending', 'approved', 'rejected'],
+                default: 'pending'
+            },
+            createdAt: {
+                type: Date,
+                default: Date.now
+            },
+            updatedAt: {
+                type: Date,
+                default: Date.now
+            },
+            isFeatured: {
+                type: Boolean,
+                default: false
+            },
+            rating: {
+                type: Number,
+                min: 1,
+                max: 5,
+                default: 5
+            }
         },
     },
     {

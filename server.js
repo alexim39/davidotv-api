@@ -13,6 +13,7 @@ import ForumRouter from './src/apps/forum/index.js';
 import EventRouter from './src/apps/event/index.js';
 import ContactRouter from './src/apps/contact/index.js';
 import PlaylistRouter from './src/apps/playlist/index.js';
+import SettingsRouter from './src/apps/settings/index.js';
 
 
 const port = process.env.PORT || 3000;
@@ -41,6 +42,7 @@ app.use('/forum', ForumRouter);
 app.use('/event', EventRouter);
 app.use('/contact', ContactRouter);
 app.use('/playlist', PlaylistRouter);
+app.use('/settings', SettingsRouter);
 
 
 /* DB connection */

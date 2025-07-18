@@ -341,6 +341,7 @@ export const clearWatchHistory = async (req, res) => {
   
 };
 
+
 /**
  * Update user's personal information
  * @param req Express request
@@ -352,10 +353,17 @@ export const updatePersonalInfo = async (req, res) => {
             userId,
             name, 
             lastname, 
+            // Personal info fields
             phone,
-            address,
             bio,
-            dob
+            jobTitle,
+            educationBackground,
+            dob,
+            // Address fields
+            street,
+            city,
+            state,
+            country
         } = req.body;
 
         // Validate required fields
@@ -375,17 +383,31 @@ export const updatePersonalInfo = async (req, res) => {
         
         // Update personalInfo fields if provided
         updateData.personalInfo = {};
+        
         if (phone) updateData.personalInfo.phone = phone;
-        if (address) updateData.personalInfo.address = address;
         if (bio) updateData.personalInfo.bio = bio;
+        if (jobTitle) updateData.personalInfo.jobTitle = jobTitle;
+        if (educationBackground) updateData.personalInfo.educationBackground = educationBackground;
         if (dob) updateData.personalInfo.dob = new Date(dob);
+        
+        // Update address fields if provided
+        updateData.personalInfo.address = {};
+        if (street) updateData.personalInfo.address.street = street;
+        if (city) updateData.personalInfo.address.city = city;
+        if (state) updateData.personalInfo.address.state = state;
+        if (country) updateData.personalInfo.address.country = country;
 
         // Find and update the user
         const updatedUser = await UserModel.findByIdAndUpdate(
             userId,
             { $set: updateData },
-            { new: true, runValidators: true }
-        ).select('-password -resetToken -resetTokenExpiry');
+            { 
+                new: true, 
+                runValidators: true,
+                // Only return these fields in the response
+                select: 'name lastname personalInfo avatar'
+            }
+        );
 
         if (!updatedUser) {
             return res.status(404).json({
@@ -397,16 +419,25 @@ export const updatePersonalInfo = async (req, res) => {
         return res.status(200).json({
             success: true,
             message: 'Personal information updated successfully',
+            data: updatedUser
         });
 
     } catch (error) {
         console.error('Error updating personal information:', error);
 
-        // Handle Mongoose validation errors
+        // Handle specific error types
         if (error.name === 'ValidationError') {
             return res.status(400).json({ 
                 success: false, 
                 message: 'Validation error',
+                error: error.message 
+            });
+        }
+        
+        if (error.name === 'CastError') {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Invalid data format',
                 error: error.message 
             });
         }
@@ -578,3 +609,206 @@ export const updateUsername = async (req, res) => {
         });
     }
 };
+
+/**
+ * Update user's testmonial
+ * @param req Express request
+ * @param res Express response
+ */
+export const updateTestimonial = async (req, res) => {
+  try {
+    const { userId, message } = req.body;
+
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          'testimonial.message': message,
+          'testimonial.status': 'pending', // Reset status when updated
+          'testimonial.updatedAt': new Date()
+        }
+      },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.json({
+      message: 'Testimonial submitted successfully!',
+      success: true,
+    });
+  } catch (error) {
+    console.error('Error updating testimonial:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+
+/**
+ * Get all testimonials with filtering and pagination
+ */
+export const getAllTestimonials = async (req, res) => {
+  try {
+    // Extract options from request query
+    const options = {
+      page: parseInt(req.query.page) || 1,
+      limit: parseInt(req.query.limit) || 10,
+      sortBy: req.query.sortBy || 'createdAt', // Default sort by createdAt
+      sortOrder: req.query.sortOrder || 'desc', // Default sort order is desc for recent first
+      status: req.query.status || 'approved',
+      search: req.query.search,
+      country: req.query.country
+    };
+
+    // Set default values
+    const page = options.page;
+    const limit = options.limit;
+    const skip = (page - 1) * limit;
+    const sortBy = options.sortBy;
+    const sortOrder = options.sortOrder === 'asc' ? 1 : -1; // Will be -1 for 'desc'
+
+    // Build filters
+    const filters = {
+      'testimonial.message': { $exists: true, $ne: '' }
+    };
+
+    // Apply status filter or default to approved
+    filters['testimonial.status'] = options.status;
+
+    if (options.search) {
+      filters['$or'] = [
+        { 'testimonial.message': { $regex: options.search, $options: 'i' } },
+        { name: { $regex: options.search, $options: 'i' } },
+        { 'personalInfo.jobTitle': { $regex: options.search, $options: 'i' } }
+      ];
+    }
+
+    if (options.country) {
+      filters['testimonial.country'] = options.country;
+    }
+
+    // Execute query
+    const [testimonials, totalCount] = await Promise.all([
+      UserModel.aggregate([
+        { $match: filters },
+        { $sort: { [`testimonial.${sortBy}`]: sortOrder } }, // This will sort by createdAt: -1 by default
+        { $skip: skip },
+        { $limit: limit },
+        {
+          $project: {
+            _id: 1,
+            name: 1,
+            lastname: 1,
+            avatar: 1,
+            'personalInfo.address.state': 1,
+            'personalInfo.address.country': 1,
+            'testimonial.message': 1,
+            'testimonial.createdAt': 1,
+            'testimonial.updatedAt': 1,
+          }
+        }
+      ]),
+      UserModel.countDocuments(filters)
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: testimonials.length,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: page,
+      testimonials: testimonials.map(user => ({
+        userId: user._id,
+        name: `${user.name} ${user.lastname}`,
+        avatar: user.avatar,
+        message: user.testimonial.message,
+        country: user.personalInfo.address.country,
+        state: user.personalInfo.address.state,
+        createdAt: user.testimonial.createdAt,
+        updatedAt: user.testimonial.updatedAt
+      }))
+    });
+
+  } catch (error) {
+    console.error('Error fetching testimonials:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while fetching testimonials'
+    });
+  }
+};
+
+
+/**
+ * Get pending testimonials for admin review
+ */
+// export const getPendingTestimonials = async (req, res) => {
+//   try {
+//     const testimonials = await UserModel.find(
+//       { 'testimonial.status': 'pending' },
+//       {
+//         name: 1,
+//         lastname: 1,
+//         email: 1,
+//         avatar: 1,
+//         'personalInfo.jobTitle': 1,
+//         'testimonial.message': 1,
+//         'testimonial.country': 1,
+//         'testimonial.state': 1,
+//         'testimonial.createdAt': 1
+//       }
+//     ).sort({ 'testimonial.createdAt': 1 });
+
+//     return {
+//       success: true,
+//       count: testimonials.length,
+//       testimonials
+//     };
+//   } catch (error) {
+//     console.error('Error fetching pending testimonials:', error);
+//     return {
+//       success: false,
+//       message: 'Server error while fetching pending testimonials'
+//     };
+//   }
+// };
+
+/**
+ * Get featured testimonials
+ */
+// export const getFeaturedTestimonials = async (req, res, limit = 3) => {
+//   try {
+//     const testimonials = await UserModel.aggregate([
+//       {
+//         $match: {
+//           'testimonial.status': 'approved',
+//           'testimonial.isFeatured': true
+//         }
+//       },
+//       { $sample: { size: limit } },
+//       {
+//         $project: {
+//           name: 1,
+//           lastname: 1,
+//           avatar: 1,
+//           'personalInfo.jobTitle': 1,
+//           'testimonial.message': 1,
+//           'testimonial.country': 1
+//         }
+//       }
+//     ]);
+
+//     return {
+//       success: true,
+//       testimonials
+//     };
+//   } catch (error) {
+//     console.error('Error fetching featured testimonials:', error);
+//     return {
+//       success: false,
+//       message: 'Server error while fetching featured testimonials'
+//     };
+//   }
+// };
