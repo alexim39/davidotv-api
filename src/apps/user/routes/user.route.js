@@ -9,12 +9,9 @@ import {
     clearWatchHistory,
     updatePersonalInfo,
     updateProfessioinalInfo,
-    updateUsername,
-    createOrUpdateTestimonial,
-    getTestimonials,
-    reactToTestimonial,
-    getUserTestimonial
+    updateUsername,   
 } from '../controllers/user.controller.js'
+import {createOrUpdateTestimonial, getTestimonials, reactToTestimonial, getUserTestimonial} from '../controllers/testimonial.controller.js'
 
 const UserRouter = express.Router();
 
