@@ -4,6 +4,7 @@ import dotenv  from "dotenv"
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import './src/apps/youtube/services/crawler.js'; // Youtube crawler
+import './src/apps/youtube/services/crawler2.js'; // Youtube crawler2
 
 import AuthRouter from './src/apps/auth/index.js';
 import YoutubeRouter from './src/apps/youtube/index.js';

@@ -1,5 +1,6 @@
 import { YoutubeVideoModel } from './../../youtube/models/youtube.model.js';
 import { UserModel } from './../models/user.model.js';
+import { TestimonialModel } from './../models/testimonial.model.js';
 import mongoose from 'mongoose';
 
 // @desc    Save video to user's library
@@ -610,205 +611,345 @@ export const updateUsername = async (req, res) => {
     }
 };
 
+
 /**
- * Update user's testmonial
+ * Create or update user testimonial
  * @param req Express request
  * @param res Express response
  */
-export const updateTestimonial = async (req, res) => {
+export const createOrUpdateTestimonial = async (req, res) => {
   try {
-    const { userId, message } = req.body;
+    const { userId, message, rating = 5 } = req.body;
 
-    const updatedUser = await UserModel.findByIdAndUpdate(
-      userId,
-      {
-        $set: {
-          'testimonial.message': message,
-          'testimonial.status': 'pending', // Reset status when updated
-          'testimonial.updatedAt': new Date()
-        }
-      },
-      { new: true }
-    );
+    // Validate input
+    if (!message) {
+      return res.status(400).json({ success: false, message: 'Testimonial message is required' });
+    }
 
-    if (!updatedUser) {
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5' });
+    }
+
+    // Get user data
+    const user = await UserModel.findById(userId);
+    if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    res.json({
-      message: 'Testimonial submitted successfully!',
-      success: true,
-    });
-  } catch (error) {
-    console.error('Error updating testimonial:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
+    // Check if testimonial exists
+    let testimonial = await TestimonialModel.findOne({ user: userId });
 
-
-/**
- * Get all testimonials with filtering and pagination
- */
-export const getAllTestimonials = async (req, res) => {
-  try {
-    // Extract options from request query
-    const options = {
-      page: parseInt(req.query.page) || 1,
-      limit: parseInt(req.query.limit) || 10,
-      sortBy: req.query.sortBy || 'createdAt', // Default sort by createdAt
-      sortOrder: req.query.sortOrder || 'desc', // Default sort order is desc for recent first
-      status: req.query.status || 'approved',
-      search: req.query.search,
-      country: req.query.country
-    };
-
-    // Set default values
-    const page = options.page;
-    const limit = options.limit;
-    const skip = (page - 1) * limit;
-    const sortBy = options.sortBy;
-    const sortOrder = options.sortOrder === 'asc' ? 1 : -1; // Will be -1 for 'desc'
-
-    // Build filters
-    const filters = {
-      'testimonial.message': { $exists: true, $ne: '' }
-    };
-
-    // Apply status filter or default to approved
-    filters['testimonial.status'] = options.status;
-
-    if (options.search) {
-      filters['$or'] = [
-        { 'testimonial.message': { $regex: options.search, $options: 'i' } },
-        { name: { $regex: options.search, $options: 'i' } },
-        { 'personalInfo.jobTitle': { $regex: options.search, $options: 'i' } }
-      ];
-    }
-
-    if (options.country) {
-      filters['testimonial.country'] = options.country;
-    }
-
-    // Execute query
-    const [testimonials, totalCount] = await Promise.all([
-      UserModel.aggregate([
-        { $match: filters },
-        { $sort: { [`testimonial.${sortBy}`]: sortOrder } }, // This will sort by createdAt: -1 by default
-        { $skip: skip },
-        { $limit: limit },
-        {
-          $project: {
-            _id: 1,
-            name: 1,
-            lastname: 1,
-            avatar: 1,
-            'personalInfo.address.state': 1,
-            'personalInfo.address.country': 1,
-            'testimonial.message': 1,
-            'testimonial.createdAt': 1,
-            'testimonial.updatedAt': 1,
-          }
-        }
-      ]),
-      UserModel.countDocuments(filters)
-    ]);
-
-    return res.status(200).json({
-      success: true,
-      count: testimonials.length,
-      totalCount,
-      totalPages: Math.ceil(totalCount / limit),
-      currentPage: page,
-      testimonials: testimonials.map(user => ({
-        userId: user._id,
+    if (testimonial) {
+      // Update existing testimonial
+      testimonial.message = message;
+      testimonial.rating = rating;
+      testimonial.status = 'pending'; // Reset status on update
+      await testimonial.save();
+    } else {
+      // Create new testimonial
+      testimonial = await TestimonialModel.create({
+        user: userId,
         name: `${user.name} ${user.lastname}`,
         avatar: user.avatar,
-        message: user.testimonial.message,
-        country: user.personalInfo.address.country,
-        state: user.personalInfo.address.state,
-        createdAt: user.testimonial.createdAt,
-        updatedAt: user.testimonial.updatedAt
-      }))
+        jobTitle: user.personalInfo?.jobTitle,
+        message,
+        rating,
+        status: 'pending'
+      });
+
+      // Add to user's testimonials array
+      user.testimonials.push(testimonial._id);
+      await user.save();
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Testimonial submitted successfully and pending approval',
+      testimonial: {
+        _id: testimonial._id,
+        message: testimonial.message,
+        rating: testimonial.rating,
+        status: testimonial.status,
+        createdAt: testimonial.createdAt
+      }
     });
 
   } catch (error) {
-    console.error('Error fetching testimonials:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error while fetching testimonials'
+    console.error('Error in createOrUpdateTestimonial:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
 
 /**
- * Get pending testimonials for admin review
+ * Get testimonials with user reactions and populated user data
+ * @param req Express request
+ * @param res Express response
  */
-// export const getPendingTestimonials = async (req, res) => {
-//   try {
-//     const testimonials = await UserModel.find(
-//       { 'testimonial.status': 'pending' },
-//       {
-//         name: 1,
-//         lastname: 1,
-//         email: 1,
-//         avatar: 1,
-//         'personalInfo.jobTitle': 1,
-//         'testimonial.message': 1,
-//         'testimonial.country': 1,
-//         'testimonial.state': 1,
-//         'testimonial.createdAt': 1
-//       }
-//     ).sort({ 'testimonial.createdAt': 1 });
+export const getTestimonials = async (req, res) => {
+  try {
+    const { status = 'approved', limit = 10, page = 1 } = req.query;
+    const userId = req.params; 
 
-//     return {
-//       success: true,
-//       count: testimonials.length,
-//       testimonials
-//     };
-//   } catch (error) {
-//     console.error('Error fetching pending testimonials:', error);
-//     return {
-//       success: false,
-//       message: 'Server error while fetching pending testimonials'
-//     };
-//   }
-// };
+    // Validate status
+    if (!['pending', 'approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status filter' });
+    }
+
+    const options = {
+      limit: parseInt(limit),
+      skip: (parseInt(page) - 1) * parseInt(limit),
+      sort: { createdAt: -1 }
+    };
+
+    // Get testimonials with populated user data
+    const testimonials = await TestimonialModel.find({ status })
+       .populate({
+            path: 'user',
+            select: 'name lastname avatar personalInfo.address.state personalInfo.address.country personalInfo.jobTitle', // Ensure jobTitle is also selected if you need it
+            transform: (doc) => {
+            return {
+                _id: doc._id,
+                name: `${doc.name} ${doc.lastname}`,
+                avatar: doc.avatar,
+                state: doc.personalInfo?.address?.state,   // Add state here
+                country: doc.personalInfo?.address?.country, // Add country here
+                jobTitle: doc.personalInfo?.jobTitle // Keep jobTitle if needed
+            };
+            }
+        })
+      .skip(options.skip)
+      .limit(options.limit)
+      .sort(options.sort)
+      .lean();
+
+    // Add user reaction status if authenticated
+    if (userId) {
+      for (const testimonial of testimonials) {
+        const reaction = testimonial.reactions.find(
+          r => r.userId && r.userId.toString() === userId.toString()
+        );
+        testimonial.userReaction = reaction ? reaction.reaction : null;
+        
+        // Convert reaction userIds to strings for consistent client-side handling
+        testimonial.reactions = testimonial.reactions.map(r => ({
+          ...r,
+          userId: r.userId?.toString()
+        }));
+      }
+    }
+
+    const total = await TestimonialModel.countDocuments({ status });
+
+    res.status(200).json({
+      success: true,
+      testimonials: testimonials.map(t => ({
+        ...t,
+        user: t.user, // Already transformed in populate
+        _id: t._id.toString(),
+        reactions: t.reactions || [] // Ensure reactions array exists
+      })),
+      pagination: {
+        total,
+        page: parseInt(page),
+        pages: Math.ceil(total / options.limit),
+        limit: options.limit
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in getTestimonials:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
 
 /**
- * Get featured testimonials
+ * React to testimonial (like/dislike)
+ * @param req Express request
+ * @param res Express response
  */
-// export const getFeaturedTestimonials = async (req, res, limit = 3) => {
-//   try {
-//     const testimonials = await UserModel.aggregate([
-//       {
-//         $match: {
-//           'testimonial.status': 'approved',
-//           'testimonial.isFeatured': true
-//         }
-//       },
-//       { $sample: { size: limit } },
-//       {
-//         $project: {
-//           name: 1,
-//           lastname: 1,
-//           avatar: 1,
-//           'personalInfo.jobTitle': 1,
-//           'testimonial.message': 1,
-//           'testimonial.country': 1
-//         }
-//       }
-//     ]);
+export const reactToTestimonial = async (req, res) => {
+  try {
+    const { userId, testimonialId, reaction } = req.body; // 'like' or 'dislike'
 
-//     return {
-//       success: true,
-//       testimonials
-//     };
-//   } catch (error) {
-//     console.error('Error fetching featured testimonials:', error);
-//     return {
-//       success: false,
-//       message: 'Server error while fetching featured testimonials'
-//     };
-//   }
-// };
+    //console.log('reactions ', userId, testimonialId, reaction);
+
+    // Validate reaction
+    if (!['like', 'dislike'].includes(reaction)) {
+      return res.status(400).json({ success: false, message: 'Invalid reaction type' });
+    }
+
+    // Find testimonial
+    const testimonial = await TestimonialModel.findById(testimonialId);
+    if (!testimonial) {
+      return res.status(404).json({ success: false, message: 'Testimonial not found' });
+    }
+
+    // Check if user already reacted to this testimonial (in the testimonial's own reactions array)
+    const existingReactionIndex = testimonial.reactions.findIndex(
+      r => r.userId.toString() === userId.toString()
+    );
+
+    let userReactionStatus = null; // To store the final reaction status for the response
+    let likesChange = 0;
+    let dislikesChange = 0;
+
+    if (existingReactionIndex >= 0) {
+      // User already reacted - update existing reaction on the testimonial
+      const existingReactionType = testimonial.reactions[existingReactionIndex].reaction;
+
+      if (existingReactionType === reaction) {
+        // User clicked the same reaction type again: remove their reaction
+        testimonial.reactions.splice(existingReactionIndex, 1);
+        if (reaction === 'like') {
+          likesChange = -1;
+        } else {
+          dislikesChange = -1;
+        }
+        userReactionStatus = null; // Reaction removed
+      } else {
+        // User changed their reaction type (e.g., from like to dislike)
+        testimonial.reactions[existingReactionIndex].reaction = reaction;
+        if (existingReactionType === 'like') {
+          likesChange = -1; // Remove old like
+          dislikesChange = 1; // Add new dislike
+        } else {
+          likesChange = 1; // Add new like
+          dislikesChange = -1; // Remove old dislike
+        }
+        userReactionStatus = reaction; // Reaction changed
+      }
+    } else {
+      // User is adding a new reaction to this testimonial
+      testimonial.reactions.push({ userId, reaction, createdAt: new Date() }); // Add createdAt for consistency
+      if (reaction === 'like') {
+        likesChange = 1;
+      } else {
+        dislikesChange = 1;
+      }
+      userReactionStatus = reaction; // New reaction added
+    }
+
+    // Update testimonial counts and save
+    testimonial.likes += likesChange;
+    testimonial.dislikes += dislikesChange;
+    await testimonial.save();
+
+    // --- Start: Corrected logic for User Model Update ---
+    if (userReactionStatus === null) {
+        // Reaction was removed from the testimonial, so remove it from the user's record
+        await UserModel.updateOne(
+            { _id: userId },
+            { $pull: { testimonialReactions: { testimonial: testimonialId } } }
+        );
+    } else {
+        // Reaction was added or changed, attempt to update first
+        const updateResult = await UserModel.updateOne(
+            { _id: userId, 'testimonialReactions.testimonial': testimonialId },
+            { $set: { 'testimonialReactions.$.reaction': userReactionStatus } }
+        );
+
+        if (updateResult.modifiedCount === 0) {
+            // If no existing reaction was found and updated (modifiedCount is 0),
+            // then push a new reaction
+            await UserModel.updateOne(
+                { _id: userId },
+                { $push: { testimonialReactions: { testimonial: testimonialId, reaction: userReactionStatus, createdAt: new Date() } } }
+            );
+        }
+    }
+    // --- End: Corrected logic for User Model Update ---
+
+    res.status(200).json({
+      success: true,
+      message: 'Reaction updated successfully',
+      likes: testimonial.likes,
+      dislikes: testimonial.dislikes,
+      userReaction: userReactionStatus // This will be 'like', 'dislike', or null
+    });
+
+  } catch (error) {
+    console.error('Error in reactToTestimonial:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+
+/**
+ * Get a single testimonial for a specific user
+ * @param req Express request
+ * @param res Express response
+ */
+export const getUserTestimonial = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    //console.log(userId)
+
+    // Find testimonial for the specified user
+    const testimonial = await TestimonialModel.findOne({ user: userId })
+      .populate({
+        path: 'user',
+        select: 'name lastname avatar personalInfo.address.state personalInfo.address.country',
+        transform: (doc) => ({
+          _id: doc._id,
+          name: `${doc.name} ${doc.lastname}`,
+          avatar: doc.avatar,
+          state: doc.personalInfo?.address?.state,
+          country: doc.personalInfo?.address?.country,
+        })
+      })
+      .lean();
+
+    if (!testimonial) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'No testimonial found for this user' 
+      });
+    }
+
+    // Add user reaction status if authenticated
+    if (userId) {
+      const reaction = testimonial.reactions.find(
+        r => r.userId && r.userId.toString() === userId.toString()
+      );
+      testimonial.userReaction = reaction ? reaction.reaction : null;
+      
+      // Convert reaction userIds to strings
+      testimonial.reactions = testimonial.reactions.map(r => ({
+        ...r,
+        userId: r.userId?.toString()
+      }));
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...testimonial,
+        _id: testimonial._id.toString(),
+        user: testimonial.user,
+        reactions: testimonial.reactions || []
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in getUserTestimonial:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};

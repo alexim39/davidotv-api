@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import axios from 'axios';
-import { YoutubeVideoModel } from './../../youtube/models/youtube.model.js';
+import { YoutubeVideoModel } from '../models/youtube.model.js';
 import rateLimit from 'axios-rate-limit';
 import winston from 'winston';
 
@@ -26,7 +26,7 @@ const youtubeApi = rateLimit(axios.create(), {
 // Configuration
 const config = {
   youtube: {
-    apiKey: process.env.YOUTUBE_API_KEY || 'AIzaSyCnqQosiJ2hFLBMQM691p61f2mkkpg6Q7Y', // from schooltraz@gmail.com
+    apiKey: process.env.YOUTUBE_API_KEY || 'AIzaSyBSlP2BK8LBdthCQE94w-C-7hapqtKxxak', // from aleximenwo@gmail.com
     apiUrl: 'https://www.googleapis.com/youtube/v3/search',
     videosUrl: 'https://www.googleapis.com/youtube/v3/videos',
     channelIds: ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA'], // Array of official channel IDs
@@ -34,10 +34,10 @@ const config = {
   },
   // Prod
   cron: {
-    trending: '0 */3 * * *', // task runs every 3 hours
-    music: '0 0 * * *', // task runs midnight 12:00am
-    videos: '0 */3 * * *', // task runs every 3 hours
-    metrics: '0 */3 * * *' // task runs every 3 hours
+    trending: '0 */6 * * *', // this task runs every 6 hours
+    music: '0 0,12 * * *', // This makes it run at 12 AM and 12 PM
+    videos: '0 */2 * * *', // task runs every 2 hours
+    metrics: '0 */5 * * *' // task runs every 5 hours
   },
   // Dev
   // cron: {

@@ -10,20 +10,24 @@ import {
     updatePersonalInfo,
     updateProfessioinalInfo,
     updateUsername,
-    updateTestimonial,
-    getAllTestimonials
+    createOrUpdateTestimonial,
+    getTestimonials,
+    reactToTestimonial,
+    getUserTestimonial
 } from '../controllers/user.controller.js'
 
 const UserRouter = express.Router();
 
-UserRouter.put('/testimonial', updateTestimonial);
-UserRouter.get('/testimonials', getAllTestimonials);
+UserRouter.put('/testimonial', createOrUpdateTestimonial);
+UserRouter.post('/testimonial/reaction', reactToTestimonial);
 UserRouter.post('/library/save', saveVideoToLibrary);
 UserRouter.put('/profile/personal', updatePersonalInfo);
 UserRouter.put('/profile/profession', updateProfessioinalInfo);
 UserRouter.put('/profile/username', updateUsername);
 //UserRouter.put('/profile/password', updatePersonalInfo);
 UserRouter.get('/library/:userId', getSavedVideos);
+UserRouter.get('/testimonial/:userId', getTestimonials);
+UserRouter.get('/testimonial/getOne/:userId', getUserTestimonial);
 UserRouter.delete('/library/remove/:userId/:youtubeVideoId', removeVideoFromLibrary);
 
 
