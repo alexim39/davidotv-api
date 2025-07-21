@@ -2,6 +2,149 @@ import { YoutubeVideoModel } from '../models/youtube.model.js';
 import mongoose from 'mongoose';
 import { UserModel } from '../../user/models/user.model.js';
 
+
+// Helper function to recursively build comment tree and populate user data
+const buildCommentTree = (comments, commentMap) => {
+    const topLevelComments = [];
+    const replyMap = new Map();
+
+    // First pass: Organize comments into a map by _id and separate replies from top-level
+    comments.forEach(comment => {
+        commentMap.set(comment._id.toString(), { ...comment }); // Clone to avoid modifying original lean doc
+        if (comment.parentComment) {
+            // This is a reply
+            if (!replyMap.has(comment.parentComment.toString())) {
+                replyMap.set(comment.parentComment.toString(), []);
+            }
+            replyMap.get(comment.parentComment.toString()).push(comment._id.toString());
+        } else {
+            // This is a top-level comment
+            topLevelComments.push(comment._id.toString());
+        }
+    });
+
+    // Second pass: Recursively attach replies
+    const attachReplies = (commentId) => {
+        const comment = commentMap.get(commentId);
+        if (!comment) return null; // Should not happen if data is consistent
+
+        // Flatten user and likedBy data
+        comment.user = {
+            _id: comment.userId?._id,
+            username: comment.userId?.username,
+            name: comment.userId?.name,
+            lastname: comment.userId?.lastname,
+            avatar: comment.userId?.avatar
+        };
+        comment.likedBy = (comment.likedBy || []).map(user => ({
+            _id: user._id,
+            username: user.username,
+            avatar: user.avatar
+        }));
+        delete comment.userId; // Remove the original populated userId field
+
+        comment.replies = []; // Initialize replies array for this comment
+
+        if (replyMap.has(commentId)) {
+            const directReplyIds = replyMap.get(commentId);
+            directReplyIds.forEach(replyId => {
+                const reply = attachReplies(replyId); // Recursively attach replies
+                if (reply) {
+                    comment.replies.push(reply);
+                }
+            });
+            // Sort replies by createdAt for chronological order
+            comment.replies.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        }
+        return comment;
+    };
+
+    const finalComments = topLevelComments
+        .map(commentId => attachReplies(commentId))
+        .filter(Boolean); // Filter out any nulls if an ID wasn't found
+
+    // Sort top-level comments (e.g., by creation date, newest first)
+    finalComments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    return finalComments;
+};
+
+
+// @desc    Get single video by ID
+// @route   GET /youtube/videos/:id
+// @access  Public
+export const getVideoById = async (req, res) => {
+    try {
+        const officialChannelIds = process.env.OFFICIAL_CHANNEL_IDS ?
+            process.env.OFFICIAL_CHANNEL_IDS.split(',') :
+            ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA']; // Default fallback
+
+        let query;
+        if (mongoose.Types.ObjectId.isValid(req.params.videoId)) {
+            query = { _id: req.params.videoId };
+        } else {
+            query = { youtubeVideoId: req.params.videoId };
+        }
+
+        // Find the video, increment views, and populate comments in one go
+        const video = await YoutubeVideoModel.findOneAndUpdate(
+            query,
+            { $inc: { appViews: 1 } },
+            { new: true } // Return the updated document
+        )
+            .populate({
+                path: 'comments.userId',
+                select: 'username name lastname avatar'
+            })
+            .populate({
+                path: 'comments.likedBy',
+                select: 'username avatar'
+            })
+            .lean() // Use lean for better performance as we're transforming the object
+            .exec();
+
+        if (!video) {
+            return res.status(404).json({
+                success: false,
+                message: 'Video not found'
+            });
+        }
+
+        // Build the hierarchical comment structure
+        const commentMap = new Map(); // To hold all comments for quick lookup
+        const processedComments = buildCommentTree(video.comments || [], commentMap);
+
+        // Filter out comments that are replies from the main comments array
+        // The `processedComments` array now contains only top-level comments with nested replies.
+        // The `video.comments` array still holds all comments flat.
+        // We'll replace `video.comments` with `processedComments` in the response.
+        video.comments = processedComments;
+
+
+        // Add isOfficial flag based on channel ID
+        const videoWithOfficialFlag = {
+            ...video,
+            isOfficialContent: officialChannelIds.includes(video.channelId),
+            url: `http://googleusercontent.com/youtube.com/${video.youtubeVideoId}`, // Corrected URL interpolation
+            // The commentCount is maintained by the pre-save hook in the model.
+            // If you want to explicitly count only top-level comments here, you would do:
+            // topLevelCommentCount: processedComments.length,
+            // Otherwise, video.commentCount from the model reflects total comments in the embedded array.
+        };
+
+        res.status(200).json({ success: true, data: videoWithOfficialFlag });
+
+    } catch (error) {
+        console.error('Error in getVideoById:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message
+        });
+    }
+};
+
+
 // @desc    Get videos by type
 // @route   GET /youtube/videos
 // @access  Public
@@ -68,142 +211,6 @@ export const getVideos = async (req, res) => {
     }
 }
 
-// @desc    Get single video by ID
-// @route   GET /youtube/videos/:id
-// @access  Public
-export const getVideoById = async (req, res) => {
-    try {
-        let video;
-        let updateQuery;
-        const officialChannelIds = process.env.OFFICIAL_CHANNEL_IDS ? 
-            process.env.OFFICIAL_CHANNEL_IDS.split(',') : 
-            ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA']; // Default fallback
-        
-        if (mongoose.Types.ObjectId.isValid(req.params.videoId)) {
-            video = await YoutubeVideoModel.findById(req.params.videoId)
-                .populate({
-                    path: 'comments.userId',
-                    select: 'username name lastname avatar' // Only include necessary fields
-                })
-                .populate({
-                    path: 'comments.likedBy',
-                    select: 'username avatar' // Only include necessary fields
-                })
-                .lean()
-                .exec();
-            updateQuery = { _id: req.params.videoId };
-        } else {
-            video = await YoutubeVideoModel.findOne({ 
-                youtubeVideoId: req.params.videoId 
-            })
-            .populate({
-                path: 'comments.userId',
-                select: 'username name lastname avatar'
-            })
-            .populate({
-                path: 'comments.likedBy',
-                select: 'username avatar'
-            })
-            .lean()
-            .exec();
-            updateQuery = { youtubeVideoId: req.params.videoId };
-        }
-        
-        if (!video) {
-            return res.status(404).json({
-                success: false,
-                message: 'Video not found'
-            });
-        }
-        
-        // Process comments to include user details
-        if (video.comments && video.comments.length > 0) {
-            video.comments = video.comments.map(comment => {
-                const user = comment.userId; // This is now populated
-                const likedByUsers = comment.likedBy || []; // These are now populated
-                
-                return {
-                    ...comment,
-                    user: { // Flatten the user object for easier access
-                        _id: user?._id,
-                        username: user?.username,
-                        name: user?.name,
-                        lastname: user?.lastname,
-                        avatar: user?.avatar
-                    },
-                    likedBy: likedByUsers.map(user => ({
-                        _id: user._id,
-                        username: user.username,
-                        avatar: user.avatar
-                    })),
-                    userId: undefined // Remove the original userId field
-                };
-            });
-        }
-        
-        // Add isOfficial flag based on channel ID
-        const videoWithOfficialFlag = {
-            ...video,
-            isOfficialContent: officialChannelIds.includes(video.channelId)
-        };
-        
-        // Increment views count
-        const updatedVideo = await YoutubeVideoModel.findOneAndUpdate(
-            updateQuery,
-            { $inc: { appViews: 1 } },
-            { new: true }
-        )
-        .populate({
-            path: 'comments.userId',
-            select: 'username name lastname avatar'
-        })
-        .populate({
-            path: 'comments.likedBy',
-            select: 'username avatar'
-        })
-        .lean();
-        
-        // Process comments for the updated video as well
-        if (updatedVideo.comments && updatedVideo.comments.length > 0) {
-            updatedVideo.comments = updatedVideo.comments.map(comment => {
-                const user = comment.userId;
-                const likedByUsers = comment.likedBy || [];
-                
-                return {
-                    ...comment,
-                    user: {
-                        _id: user?._id,
-                        username: user?.username,
-                        name: user?.name,
-                        lastname: user?.lastname,
-                        avatar: user?.avatar
-                    },
-                    likedBy: likedByUsers.map(user => ({
-                        _id: user._id,
-                        username: user.username,
-                        avatar: user.avatar
-                    })),
-                    userId: undefined
-                };
-            });
-        }
-        
-        const videoWithUrl = {
-            ...updatedVideo,
-            url: `https://www.youtube.com/watch?v=${updatedVideo.youtubeVideoId}`,
-            isOfficialContent: officialChannelIds.includes(updatedVideo.channelId)
-        };
-        
-        res.status(200).json({success: true, data: videoWithUrl});
-
-    } catch (error) {
-        console.error('Error in getVideoById:', error.message);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
-        });
-    }
-}
 
 export const searchVideos = async (req, res) => {
     try {
@@ -387,66 +394,6 @@ export const getPlaylistVideos = async (req, res) => {
     }
 }
 
-export const addComment = async (req, res) => {
-    try {
-        const { userId, videoId, text } = req.body;
-
-        if (!userId || !videoId || !text) {
-            return res.status(400).json({
-                success: false,
-                message: 'Missing required fields: userId, videoId, or text'
-            });
-        }
-
-        const video = await YoutubeVideoModel.findOne({ youtubeVideoId: videoId });
-        if (!video) {
-            return res.status(404).json({
-                success: false,
-                message: 'Video not found'
-            });
-        }
-
-        const user = await UserModel.findById(userId);
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
-        }
-
-        const newComment = {
-            userId,
-            text,
-            likes: 0,
-            likedBy: [],
-            replies: [],
-            isEdited: false,
-            isPinned: false,
-        };
-
-        video.comments.unshift(newComment);
-        video.commentCount = video.comments.length;
-
-        await video.save();
-
-        res.status(201).json({
-            success: true,
-            message: 'Comment added successfully',
-            comment: newComment,
-            videoId: video.youtubeVideoId
-        });
-
-    } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error',
-            error: error.message 
-        });
-    }
-}
-
-
   export const likeVideo = async (req, res) => {
     try {
         const { userId, videoId } = req.body;
@@ -501,7 +448,6 @@ export const addComment = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server error' });
     }
 }
-
 
   export const dislikeVideo = async (req, res) => {
     try {
