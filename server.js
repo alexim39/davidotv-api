@@ -7,6 +7,8 @@ import './src/apps/youtube/services/crawler.js'; // Youtube crawler
 import './src/apps/youtube/services/crawler2.js'; // Youtube crawler2
 import './src/apps/youtube/services/crawler3.js'; // Youtube crawler3
 
+import path from 'path';
+
 import AuthRouter from './src/apps/auth/index.js';
 import YoutubeRouter from './src/apps/youtube/index.js';
 import EmailSubscriptionRouter from './src/apps/email-subscription/index.js';
@@ -16,6 +18,7 @@ import EventRouter from './src/apps/event/index.js';
 import ContactRouter from './src/apps/contact/index.js';
 import PlaylistRouter from './src/apps/playlist/index.js';
 import SettingsRouter from './src/apps/settings/index.js';
+import ProfileImageRouter from './src/services/profile-picture.js';
 
 
 const port = process.env.PORT || 3000;
@@ -45,7 +48,10 @@ app.use('/event', EventRouter);
 app.use('/contact', ContactRouter);
 app.use('/playlist', PlaylistRouter);
 app.use('/settings', SettingsRouter);
+app.use('/image', ProfileImageRouter);
 
+// Serve static files
+app.use('/uploads', express.static(path.join(process.cwd(), 'src', 'uploads')));
 
 /* DB connection */
 mongoose.connect(`mongodb+srv://${process.env.MONGODB_USERNAME}:${process.env.MONGODB_PASSWORD}@cluster0.ltu282p.mongodb.net/${process.env.MONGODB_DATABASE}?retryWrites=true&w=majority`)

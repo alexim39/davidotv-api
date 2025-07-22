@@ -23,7 +23,7 @@ UserRouter.put('/profile/profession', updateProfessioinalInfo);
 UserRouter.put('/profile/username', updateUsername);
 //UserRouter.put('/profile/password', updatePersonalInfo);
 UserRouter.get('/library/:userId', getSavedVideos);
-UserRouter.get('/testimonial/:userId', getTestimonials);
+UserRouter.get('/testimonial', getTestimonials);
 UserRouter.get('/testimonial/getOne/:userId', getUserTestimonial);
 UserRouter.delete('/library/remove/:userId/:youtubeVideoId', removeVideoFromLibrary);
 

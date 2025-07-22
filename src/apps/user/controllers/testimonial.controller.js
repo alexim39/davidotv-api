@@ -85,7 +85,7 @@ export const createOrUpdateTestimonial = async (req, res) => {
 export const getTestimonials = async (req, res) => {
   try {
     const { status = 'approved', limit = 10, page = 1 } = req.query;
-    const userId = req.params; 
+    //const userId = req.params; 
 
     // Validate status
     if (!['pending', 'approved', 'rejected'].includes(status)) {
@@ -120,20 +120,20 @@ export const getTestimonials = async (req, res) => {
       .lean();
 
     // Add user reaction status if authenticated
-    if (userId) {
-      for (const testimonial of testimonials) {
-        const reaction = testimonial.reactions.find(
-          r => r.userId && r.userId.toString() === userId.toString()
-        );
-        testimonial.userReaction = reaction ? reaction.reaction : null;
+    // if (userId) {
+    //   for (const testimonial of testimonials) {
+    //     const reaction = testimonial.reactions.find(
+    //       r => r.userId && r.userId.toString() === userId.toString()
+    //     );
+    //     testimonial.userReaction = reaction ? reaction.reaction : null;
         
-        // Convert reaction userIds to strings for consistent client-side handling
-        testimonial.reactions = testimonial.reactions.map(r => ({
-          ...r,
-          userId: r.userId?.toString()
-        }));
-      }
-    }
+    //     // Convert reaction userIds to strings for consistent client-side handling
+    //     testimonial.reactions = testimonial.reactions.map(r => ({
+    //       ...r,
+    //       userId: r.userId?.toString()
+    //     }));
+    //   }
+    // }
 
     const total = await TestimonialModel.countDocuments({ status });
 
