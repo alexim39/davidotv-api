@@ -144,7 +144,45 @@ const userSchema = mongoose.Schema(
             testimonial: { type: mongoose.Schema.Types.ObjectId, ref: 'Testimonial' },
             reaction: { type: String, enum: ['like', 'dislike'] },
             createdAt: { type: Date, default: Date.now }
-        }]
+        }],
+        // Add shopping-related fields to the existing User model
+        shopping: {
+            cart: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: 'ShoppingCart'
+            },
+            wishlist: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: 'Wishlist'
+            },
+            purchaseHistory: [{
+              type: mongoose.Schema.Types.ObjectId,
+              ref: 'Order'
+            }],
+            paymentMethods: [{
+              nickname: String,
+              methodType: {
+                type: String,
+                enum: ['credit_card', 'paypal', 'bank_transfer', 'crypto']
+              },
+              details: mongoose.Schema.Types.Mixed, // Store encrypted payment details
+              isDefault: Boolean
+            }],
+            preferences: {
+              newsletter: {
+                type: Boolean,
+                default: true
+              },
+              orderNotifications: {
+                type: Boolean,
+                default: true
+              },
+              savePaymentInfo: {
+                type: Boolean,
+                default: false
+              }
+            },
+        }
     },
     { timestamps: true }
 );
