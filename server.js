@@ -19,6 +19,7 @@ import ContactRouter from './src/apps/contact/index.js';
 import PlaylistRouter from './src/apps/playlist/index.js';
 import SettingsRouter from './src/apps/settings/index.js';
 import ProfileImageRouter from './src/services/profile-picture.js';
+import StoreRouter from './src/apps/store/index.js';
 
 
 const port = process.env.PORT || 3000;
@@ -49,6 +50,7 @@ app.use('/contact', ContactRouter);
 app.use('/playlist', PlaylistRouter);
 app.use('/settings', SettingsRouter);
 app.use('/image', ProfileImageRouter);
+app.use('/store', StoreRouter);
 
 // Serve static files
 app.use('/uploads', express.static(path.join(process.cwd(), 'src', 'uploads')));

@@ -82,7 +82,8 @@ ProfileImageRouter.post('/profile/:userId', upload.single('profilePicture'), asy
         // Construct URLs
         const avatarFilename = req.file.filename;
         const avatarUrlPath = `/uploads/${avatarFilename}`;
-        const fullAvatarUrl = `${req.protocol}://${req.get('host')}${avatarUrlPath}`;
+        //const fullAvatarUrl = `${req.protocol}://${req.get('host')}${avatarUrlPath}`;
+        const fullAvatarUrl = `https://davidotv-j3malln3.b4a.run${avatarUrlPath}`;
 
         // Update user in database
         const updatedUser = await UserModel.findByIdAndUpdate(

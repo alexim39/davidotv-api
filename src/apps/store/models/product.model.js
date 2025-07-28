@@ -33,7 +33,7 @@ const productSchema = mongoose.Schema(
     }],
     categories: [{
       type: String,
-      enum: ['apparel', 'accessories', 'home', 'music', 'collectibles', 'limited-edition'],
+      enum: ['all', 'apparel', 'accessories', 'home', 'music', 'collectibles', 'limited-edition'],
       required: true
     }],
     type: {
@@ -75,7 +75,7 @@ const productSchema = mongoose.Schema(
       type: Boolean,
       default: false
     },
-    isNew: {
+    isNewProduct: {
       type: Boolean,
       default: false
     },
