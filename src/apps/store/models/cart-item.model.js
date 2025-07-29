@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
 
-
 const cartItemSchema = mongoose.Schema({
   product: {
     type: mongoose.Schema.Types.ObjectId,
@@ -26,6 +25,5 @@ const cartItemSchema = mongoose.Schema({
         timestamps: true
     }
 );
-
 
 export const CartItemModel = mongoose.model('CartItem', cartItemSchema);

@@ -52,5 +52,4 @@ const productReviewSchema = mongoose.Schema(
   { timestamps: true }
 );
 
-
 export const ProductReviewModel = mongoose.model('ProductReview', productReviewSchema);
