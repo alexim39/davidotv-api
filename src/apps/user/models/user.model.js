@@ -29,6 +29,11 @@ const userSchema = mongoose.Schema(
             trim: true,
             required: [true, "Please enter password"]
         },
+        authenticationMethod: {
+            type: String,
+            enum: ['local', 'google', 'facebook', 'twitter'],
+            default: 'local'
+        },
         personalInfo: {
             address: {
                 street: { type: String, trim: true },

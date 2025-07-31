@@ -1,12 +1,13 @@
 import express from 'express';
 import {
-    forgotPassword, resetPassword, changePassword, signup, signin, getUser, signout, accountActivationEmail, activateAccount
+    forgotPassword, resetPassword, changePassword, signup, signin, googleSignin, getUser, signout, accountActivationEmail, activateAccount
 } from '../controllers/auth.controller.js'
 
 const AuthRouter = express.Router();
 
 AuthRouter.post('/signup', signup);
 AuthRouter.post('/signin', signin);
+AuthRouter.post('/google-signin', googleSignin);
 AuthRouter.post('/signout', signout);
 // Get partner
 AuthRouter.get('/', getUser);

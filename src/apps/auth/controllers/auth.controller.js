@@ -88,7 +88,7 @@ export const signup = async (req, res) => {
     }
 };
 
-// User login
+// User App login
 export const signin = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -114,6 +114,74 @@ export const signin = async (req, res) => {
 
   } catch (error) {
     console.error("Error getting user:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// User Google login
+export const googleSignin = async (req, res) => {
+  try {
+    const { googleUser } = req.body;
+
+    if (!googleUser || !googleUser.email) {
+      return res.status(400).json({ success: false, message: "Missing Google user data" });
+    }
+
+    const { email, displayName, photoURL } = googleUser;
+    
+    // Split displayName into name and lastname
+    const [name, ...restOfName] = displayName.split(" ");
+    const lastname = restOfName.join(" ") || "";
+
+    let user = await UserModel.findOne({ email });
+
+    // If user doesn't exist, create a new one
+    if (!user) {
+      // Generate a unique username
+      const username = await generateUniqueUsername(name, lastname);
+
+      user = new UserModel({
+        name: name,
+        lastname: lastname,
+        email: email,
+        username: username,
+        avatar: photoURL,
+        // Since Google authentication doesn't provide a password,
+        // we'll set a placeholder to prevent direct password login.
+        password: "google_signin_placeholder_password",
+        // Add a flag to identify users who signed up with a provider
+        authenticationMethod: 'google',
+      });
+
+      await user.save();
+    } else {
+      // If the user exists, we can still update their info if needed
+      // (e.g., photoURL, display name) or simply authenticate them.
+      // We'll also update the authentication method if it's not set.
+      if (!user.authenticationMethod) {
+        user.authenticationMethod = 'google';
+        await user.save();
+      }
+    }
+
+    // Now, authenticate the user regardless of whether they were newly created or already existed
+    const token = jwt.sign({ id: user._id }, process.env.JWTTOKENSECRET, {
+      expiresIn: "1d",
+    });
+
+    res.cookie("jwt", token, {
+      httpOnly: true,
+      sameSite: "none",
+      secure: true,
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    // Exclude password and other sensitive fields from the response
+    const { password: _, ...userObject } = user.toJSON();
+
+    res.status(200).json({ success: true, message: "Signed in successfully with Google", user: userObject });
+  } catch (error) {
+    console.error("Error with Google Sign-In:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
