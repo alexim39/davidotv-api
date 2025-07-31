@@ -2,6 +2,8 @@ import { WishlistModel } from '../models/wishlist.model.js';
 import { ProductModel } from '../models/product.model.js';
 import { UserModel } from '../../user/models/user.model.js';
 
+// addToWishlist adds a product to the user's wishlist
+// It checks if the product exists, creates a wishlist if it doesn't exist,
 export const addToWishlist = async (req, res) => {
   try {
     const { productId, userId } = req.body;
@@ -78,6 +80,68 @@ export const addToWishlist = async (req, res) => {
       success: false, 
       message: 'Internal server error',
       error: error.message 
+    });
+  }
+};
+
+
+// getUserWishlist retrieves the wishlist for a specific user
+// It populates the product details for each item in the wishlist.
+export const getUserWishlist = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+
+    const wishlist = await WishlistModel.findOne({ user: userId })
+      .populate({
+        path: 'products.product',
+        select: 'name price discountedPrice images brand isNewProduct isLimitedEdition rating inventory'
+      });
+
+    if (!wishlist) {
+      return res.status(404).json({
+        success: false,
+        products: [],
+        message: 'Wishlist not found'
+      });
+    }
+
+    // Flatten products for frontend
+    const products = wishlist.products.map(item => {
+      const product = item.product;
+      return {
+        _id: product._id,
+        name: product.name,
+        price: product.price,
+        discountedPrice: product.discountedPrice,
+        images: product.images,
+        brand: product.brand,
+        isNewProduct: product.isNewProduct,
+        isLimitedEdition: product.isLimitedEdition,
+        rating: product.rating,
+        inventory: product.inventory,
+        addedAt: item.addedAt
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      data: products,
+      message: 'Wishlist retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Error fetching wishlist:', error);
+    res.status(500).json({
+      success: false,
+      products: [],
+      message: 'Internal server error',
+      error: error.message
     });
   }
 };
