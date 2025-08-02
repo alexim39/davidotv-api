@@ -1,39 +1,105 @@
 import { UserModel } from '../../user/models/user.model.js';
 import { ThreadModel } from './../models/thread.model.js';
 import { CommentModel } from '../models/comment.model.js';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+
+
+// Configure storage for uploaded files
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // Corrected path to align with express.static middleware
+    const uploadDir = 'src/uploads/forum/media'; 
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+
+// File filter to accept only certain media types
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image/') || 
+      file.mimetype.startsWith('video/') || 
+      file.mimetype.startsWith('audio/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Unsupported file type'), false);
+  }
+};
+
+// Configure multer upload middleware
+const upload = multer({ 
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB limit
+  }
+}).single('media');
 
 /**
- *  @desc    Create a new forum thread
+ * @desc    Create a new forum thread with optional media
  */
 export const createThread = async (req, res) => {
   try {
+    // First handle the file upload
+    upload(req, res, async (err) => {
+      if (err) {
+        return res.status(400).json({
+          success: false,
+          message: err.message
+        });
+      }
 
-    // Create new thread
-    const newThread = new ThreadModel({
-      title: req.body.title,
-      content: req.body.content,
-      author: req.body.authorId,
-      tags: req.body.tags || []
+      // Extract other form fields
+      const { title, content, tags, authorId } = req.body;
+      
+      // Prepare thread data
+      const threadData = {
+        title,
+        content,
+        author: authorId,
+        tags: JSON.parse(tags || '[]')
+      };
+
+      // If file was uploaded, add media info
+      if (req.file) {
+        threadData.media = {
+          url: `/uploads/forum/media/${req.file.filename}`,
+          type: req.file.mimetype.split('/')[0], // 'image', 'video', or 'audio'
+          filename: req.file.filename,
+          originalName: req.file.originalname,
+          size: req.file.size
+        };
+      }
+
+      // Create new thread
+      const newThread = new ThreadModel(threadData);
+
+      // Save thread
+      const savedThread = await newThread.save();
+
+      // Update user's forum activity
+      await UserModel.findByIdAndUpdate(newThread.author, {
+        $push: { 'forumActivity.threads': savedThread._id }
+      });
+
+      // Populate author info before sending response
+      const populatedThread = await ThreadModel.findById(savedThread._id)
+        .populate('author', 'name username avatar');
+
+      res.status(201).json({
+        success: true,
+        data: populatedThread,
+        message: 'Thread created successfully'
+      });
     });
-
-    // Save thread
-    const savedThread = await newThread.save();
-
-    // Update user's forum activity
-    await UserModel.findByIdAndUpdate(newThread.author, {
-      $push: { 'forumActivity.threads': savedThread._id }
-    });
-
-    // Populate author info before sending response
-    const populatedThread = await ThreadModel.findById(savedThread._id)
-      .populate('author', 'name username avatar');
-
-    res.status(201).json({
-      success: true,
-      data: populatedThread,
-      message: 'Thread created successfully'
-    });
-
   } catch (error) {
     console.error('Error creating thread:', error);
     res.status(500).json({
@@ -77,6 +143,7 @@ export const getThreads = async (req, res) => {
       .skip(skip)
       .limit(limit)
       .populate('author', 'name username avatar')
+      .select('-__v') // Exclude version key
       .lean();
 
     // Get total count for pagination
@@ -114,6 +181,7 @@ export const getThreadById = async (req, res) => {
     // Get thread with author populated
     const thread = await ThreadModel.findById(threadId)
       .populate('author', 'name username avatar')
+      .select('-__v') // Exclude version key
       .lean();
 
     if (!thread) {
@@ -130,8 +198,8 @@ export const getThreadById = async (req, res) => {
         path: 'replies',
         populate: { path: 'author', select: 'name username avatar' }
       })
+      .select('-__v') // Exclude version key
       .lean();
-
 
     // Increment view count (async without waiting)
     ThreadModel.findByIdAndUpdate(threadId, { $inc: { viewCount: 1 } }).exec();
@@ -189,7 +257,9 @@ export const toggleThreadLike = async (req, res) => {
           $pull: { likedBy: userId }
         },
         { new: true }
-      );
+      )
+      .populate('author', 'name username avatar')
+      .select('-__v'); // Exclude version key
 
       updatedUser = await UserModel.findByIdAndUpdate(
         userId,
@@ -207,7 +277,9 @@ export const toggleThreadLike = async (req, res) => {
           $addToSet: { likedBy: userId }
         },
         { new: true }
-      );
+      )
+      .populate('author', 'name username avatar')
+      .select('-__v'); // Exclude version key
 
       updatedUser = await UserModel.findByIdAndUpdate(
         userId,
@@ -224,7 +296,7 @@ export const toggleThreadLike = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        threadId,
+        thread: updatedThread,
         likeCount,
         isLiked: !alreadyLiked
       },
@@ -261,11 +333,21 @@ export const getThreadsByTags = async (req, res) => {
       tags: { $in: tagArray } 
     })
     .populate('author', 'name username avatar')
-    .sort({ createdAt: -1 });
+    .select('-__v') // Exclude version key
+    .sort({ createdAt: -1 })
+    .lean();
 
-    res.status(200).json({data: threads, success: true, message: 'Threads fetched successfully'});
+    res.status(200).json({
+      data: threads, 
+      success: true, 
+      message: 'Threads fetched successfully'
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error fetching threads by tags', error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error fetching threads by tags', 
+      error: error.message 
+    });
   }
 };
 
@@ -306,5 +388,3 @@ export const deleteThread = async (req, res) => {
     res.status(500).json({success: false, message: 'Error deleting thread', error: error.message });
   }
 };
-
-

@@ -3,6 +3,8 @@ import {ProductModel} from '../models/product.model.js';
 // upload products
 export const addProducts = async (req, res) => {
     try {
+
+        //console.log('Adding products:', req.body);
         // Sample products data matching the schema
         //const sampleProducts = [
             // {
@@ -174,7 +176,8 @@ export const addProducts = async (req, res) => {
         //];
 
         // Insert the sample products into the database
-        const createdProducts = await ProductModel.insertMany(sampleProducts);
+        //const createdProducts = await ProductModel.insertMany(sampleProducts);
+        const createdProducts = await ProductModel.insertMany(req.body);
 
         res.status(200).json({
             message: 'Products added successfully',

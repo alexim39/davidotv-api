@@ -29,6 +29,29 @@ const threadSchema = new mongoose.Schema(
         message: "Cannot add more than 5 tags"
       }
     },
+    media: {
+      url: {
+        type: String,
+        required: true
+      },
+      type: {
+        type: String,
+        enum: ['image', 'video', 'audio'],
+        required: true
+      },
+      filename: {
+        type: String,
+        required: true
+      },
+      originalName: {
+        type: String,
+        required: true
+      },
+      size: {
+        type: Number,
+        required: true
+      }
+    },
     likeCount: {
       type: Number,
       default: 0
@@ -61,7 +84,6 @@ const threadSchema = new mongoose.Schema(
     toObject: { virtuals: true }
   }
 );
-
 
 /* Thread Virtuals */
 threadSchema.virtual('comments', {
