@@ -18,7 +18,7 @@ import EventRouter from './src/apps/event/index.js';
 import ContactRouter from './src/apps/contact/index.js';
 import PlaylistRouter from './src/apps/playlist/index.js';
 import SettingsRouter from './src/apps/settings/index.js';
-import ProfileImageRouter from './src/services/profile-picture.js';
+import ProfileImageRouter from './src/services/profile-image.js';
 import StoreRouter from './src/apps/store/index.js';
 
 
