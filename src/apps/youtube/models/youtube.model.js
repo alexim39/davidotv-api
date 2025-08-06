@@ -40,7 +40,17 @@ const youtubeVideoSchema = mongoose.Schema(
       maxres: { type: String }
     },
     duration: {
-      type: String // ISO 8601 duration format (PT1M33S)
+      type: String, // ISO 8601 format (e.g. PT1M33S)
+      required: true
+    },
+    durationSeconds: {
+      type: Number,
+      default: 0
+    },
+    isShort: {
+      type: Boolean,
+      default: false,
+      index: true
     },
 
     // Engagement Metrics
@@ -366,6 +376,20 @@ youtubeVideoSchema.methods.addReply = function(parentCommentId, userId, userAvat
   
   return this.save();
 };
+
+
+// Pre-save hook to calculate durationSeconds and isShort
+youtubeVideoSchema.pre('save', function (next) {
+  const matches = this.duration.match(/PT(?:(\d+)M)?(?:(\d+)S)?/);
+  const minutes = parseInt(matches?.[1] || '0', 10);
+  const seconds = parseInt(matches?.[2] || '0', 10);
+  const totalSeconds = (minutes * 60) + seconds;
+
+  this.durationSeconds = totalSeconds;
+  this.isShort = totalSeconds <= 120; // Updated from 60 to 120
+
+  next();
+});
 
 
 export const YoutubeVideoModel = mongoose.model('YoutubeVideo', youtubeVideoSchema);

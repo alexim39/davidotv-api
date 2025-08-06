@@ -327,6 +327,7 @@ export const searchVideos = async (req, res) => {
     }
 }
 
+
 export const getPlaylistVideos = async (req, res) => {
     try {
         const { 
@@ -394,7 +395,8 @@ export const getPlaylistVideos = async (req, res) => {
     }
 }
 
-  export const likeVideo = async (req, res) => {
+
+export const likeVideo = async (req, res) => {
     try {
         const { userId, videoId } = req.body;
 
@@ -449,7 +451,8 @@ export const getPlaylistVideos = async (req, res) => {
     }
 }
 
-  export const dislikeVideo = async (req, res) => {
+
+export const dislikeVideo = async (req, res) => {
     try {
         const { userId, videoId } = req.body;
 
@@ -501,3 +504,4 @@ export const getPlaylistVideos = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server error' });
     }
 }
+

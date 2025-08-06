@@ -27,6 +27,8 @@ YoutubeRouter.delete('/comment/reply/delete/:parentCommentId/:replyId/:userId/:v
 
 
 
+
+import { YoutubeVideoModel } from '../models/youtube.model.js';
 YoutubeRouter.post('/fetchAndStoreVideoById/:videoId',  async (req, res) => {
   try {
     const video = await fetchAndStoreVideoById(req.params.videoId, req.body.menuType || 'music');
@@ -35,5 +37,51 @@ YoutubeRouter.post('/fetchAndStoreVideoById/:videoId',  async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+YoutubeRouter.get('/updateVideoDurations',  async (req, res) => {
+  try {
+    const videos = await YoutubeVideoModel.find({ duration: { $exists: true } });
+
+    const bulkOps = [];
+
+    for (const video of videos) {
+      const matches = video.duration.match(/PT(?:(\d+)M)?(?:(\d+)S)?/);
+      if (!matches) continue;
+
+      const minutes = parseInt(matches[1] || '0', 10);
+      const seconds = parseInt(matches[2] || '0', 10);
+      const totalSeconds = (minutes * 60) + seconds;
+
+      const needsUpdate =
+        video.durationSeconds !== totalSeconds || typeof video.isShort === 'undefined';
+
+      if (needsUpdate) {
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: video._id },
+            update: {
+              $set: {
+                durationSeconds: totalSeconds,
+                isShort: totalSeconds <= 60,
+              },
+            },
+          },
+        });
+      }
+    }
+
+    if (bulkOps.length > 0) {
+      await YoutubeVideoModel.bulkWrite(bulkOps);
+    }
+
+    console.log(`✅ Updated ${bulkOps.length} video records`);
+    return res.status(200).json({ message: `Updated ${bulkOps.length} videos.` });
+  } catch (error) {
+    console.error('❌ Error updating video durations:', error);
+    return res.status(500).json({ error: 'Something went wrong.' });
+  } finally {
+    //await mongoose.disconnect();
+  }
+})
 
 export default YoutubeRouter;
