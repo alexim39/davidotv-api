@@ -70,7 +70,7 @@ const youtubeVideoSchema = mongoose.Schema(
       default: 0,
       index: true
     },
-     appLikedBy: [{
+    appLikedBy: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     }],
@@ -254,16 +254,49 @@ youtubeVideoSchema.index({
   isOfficialContent: 1 
 });
 
+// Text index for search functionality
+youtubeVideoSchema.index({
+  title: 'text',
+  description: 'text',
+  tags: 'text',
+  channel: 'text'
+});
 
-// Pre-save hook to calculate engagement score
-youtubeVideoSchema.pre('save', function(next) {
-  // Simple engagement formula (adjust weights as needed)
+// COMBINED Pre-save hook to calculate all derived fields
+youtubeVideoSchema.pre('save', function (next) {
+  // === Duration and isShort calculation ===
+  if (this.duration) {
+    const matches = this.duration.match(/PT(?:(\d+)M)?(?:(\d+)S)?/);
+    if (matches) {
+      const minutes = parseInt(matches[1] || '0', 10);
+      const seconds = parseInt(matches[2] || '0', 10);
+      const totalSeconds = (minutes * 60) + seconds;
+
+      this.durationSeconds = totalSeconds;
+      this.isShort = totalSeconds <= 120;
+    }
+  }
+
+  // === Comment stats calculation ===
+  this.commentStats.totalComments = this.comments.length;
+  this.commentStats.totalLikes = this.comments.reduce((sum, comment) => sum + comment.likes, 0);
+  
+  // Sort comments by likes and get the top 3 IDs
+  const topCommentIds = [...this.comments]
+    .sort((a, b) => b.likes - a.likes)
+    .slice(0, 3)
+    .map(comment => comment._id);
+  this.commentStats.topComments = topCommentIds;
+
+  // === Engagement score calculation ===
   this.engagementScore = Math.round(
     (this.views * 0.5) + 
     (this.likes * 2) + 
-    (this.commentCount * 3) -
+    (this.commentStats.totalComments * 3) +
+    (this.commentStats.totalLikes * 0.5) -
     (this.dislikes * 1)
   );
+
   next();
 });
 
@@ -284,46 +317,10 @@ youtubeVideoSchema.statics.findOfficialMusic = function(limit = 20) {
   .limit(limit);
 };
 
-// In your Mongoose model (youtube.model.js)
-youtubeVideoSchema.index({
-    title: 'text',
-    description: 'text',
-    tags: 'text',
-    channel: 'text' // Add this line
-});
-
-// Update pre-save hook to maintain comment stats
-youtubeVideoSchema.pre('save', function(next) {
-  // Update comment count
-  this.commentStats.totalComments = this.comments.length;
-  
-  // Update total likes
-  this.commentStats.totalLikes = this.comments.reduce((sum, comment) => sum + comment.likes, 0);
-  
-  // Update top comments (most liked, limit to 3)
-  this.commentStats.topComments = [...this.comments]
-    .sort((a, b) => b.likes - a.likes)
-    .slice(0, 3)
-    .map(comment => comment._id);
-  
-  // Update engagement score with comment metrics
-  this.engagementScore = Math.round(
-    (this.views * 0.5) + 
-    (this.likes * 2) + 
-    (this.commentStats.totalComments * 3) +
-    (this.commentStats.totalLikes * 0.5) -
-    (this.dislikes * 1)
-  );
-  
-  next();
-});
-
 // Add method to add a comment
-youtubeVideoSchema.methods.addComment = function(userId, userAvatar, username, text) {
+youtubeVideoSchema.methods.addComment = function(userId, text) {
   const newComment = {
     userId,
-    userAvatar,
-    username,
     text,
     likes: 0,
     likedBy: [],
@@ -333,6 +330,8 @@ youtubeVideoSchema.methods.addComment = function(userId, userAvatar, username, t
   };
   
   this.comments.unshift(newComment); // Add to beginning for newest first
+  this.commentStats.totalComments = this.comments.length; // Update stats immediately
+  
   return this.save();
 };
 
@@ -349,18 +348,18 @@ youtubeVideoSchema.methods.likeComment = function(commentId, userId) {
   
   comment.likes += 1;
   comment.likedBy.push(userId);
+  this.commentStats.totalLikes += 1; // Update stats immediately
+  
   return this.save();
 };
 
 // Add method to reply to a comment
-youtubeVideoSchema.methods.addReply = function(parentCommentId, userId, userAvatar, username, text) {
+youtubeVideoSchema.methods.addReply = function(parentCommentId, userId, text) {
   const parentComment = this.comments.id(parentCommentId);
   if (!parentComment) throw new Error('Parent comment not found');
   
   const newReply = {
     userId,
-    userAvatar,
-    username,
     text,
     likes: 0,
     likedBy: [],
@@ -372,23 +371,10 @@ youtubeVideoSchema.methods.addReply = function(parentCommentId, userId, userAvat
   const reply = this.comments.create(newReply);
   this.comments.push(reply);
   parentComment.replies.push(reply._id);
+  this.commentStats.totalComments += 1; // Update stats immediately
   
   return this.save();
 };
-
-
-// Pre-save hook to calculate durationSeconds and isShort
-youtubeVideoSchema.pre('save', function (next) {
-  const matches = this.duration.match(/PT(?:(\d+)M)?(?:(\d+)S)?/);
-  const minutes = parseInt(matches?.[1] || '0', 10);
-  const seconds = parseInt(matches?.[2] || '0', 10);
-  const totalSeconds = (minutes * 60) + seconds;
-
-  this.durationSeconds = totalSeconds;
-  this.isShort = totalSeconds <= 120; // Updated from 60 to 120
-
-  next();
-});
 
 
 export const YoutubeVideoModel = mongoose.model('YoutubeVideo', youtubeVideoSchema);
