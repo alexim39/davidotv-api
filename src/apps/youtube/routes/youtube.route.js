@@ -38,7 +38,7 @@ YoutubeRouter.post('/fetchAndStoreVideoById/:videoId',  async (req, res) => {
   }
 });
 
-YoutubeRouter.get('/updateVideoDurations',  async (req, res) => {
+YoutubeRouter.get('/updateVideoDurations', async (req, res) => {
   try {
     const videos = await YoutubeVideoModel.find({ duration: { $exists: true } });
 
@@ -53,7 +53,8 @@ YoutubeRouter.get('/updateVideoDurations',  async (req, res) => {
       const totalSeconds = (minutes * 60) + seconds;
 
       const needsUpdate =
-        video.durationSeconds !== totalSeconds || typeof video.isShort === 'undefined';
+        video.durationSeconds !== totalSeconds ||
+        typeof video.isShort === 'undefined';
 
       if (needsUpdate) {
         bulkOps.push({
@@ -62,7 +63,7 @@ YoutubeRouter.get('/updateVideoDurations',  async (req, res) => {
             update: {
               $set: {
                 durationSeconds: totalSeconds,
-                isShort: totalSeconds <= 60,
+                isShort: totalSeconds <= 120, // ← Updated from 60 to 120
               },
             },
           },
@@ -80,8 +81,9 @@ YoutubeRouter.get('/updateVideoDurations',  async (req, res) => {
     console.error('❌ Error updating video durations:', error);
     return res.status(500).json({ error: 'Something went wrong.' });
   } finally {
-    //await mongoose.disconnect();
+    // Commented out to avoid disconnecting shared connections
+    // await mongoose.disconnect();
   }
-})
+});
 
 export default YoutubeRouter;

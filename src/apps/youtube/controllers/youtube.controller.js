@@ -150,7 +150,7 @@ export const getVideoById = async (req, res) => {
 // @access  Public
 export const getVideos = async (req, res) => {
     try {
-        const { menuType, isOfficialContent, limit, page = 0, sort } = req.query;
+        const { menuType, isOfficialContent, limit, page = 0, sort, isShort } = req.query;
         const officialChannelIds = process.env.OFFICIAL_CHANNEL_IDS ? 
             process.env.OFFICIAL_CHANNEL_IDS.split(',') : 
             ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA']; // Default fallback
@@ -185,6 +185,11 @@ export const getVideos = async (req, res) => {
         } else if (isOfficialContent === 'false') {
             query.isOfficialContent = false;
             query.channelId = { $nin: officialChannelIds };
+        } else if (isShort === 'true') {
+            query.isShort = true;
+        }
+        else if (isShort === 'false') {
+            query.isShort = false;
         }
 
         const sortOption = sort || '-publishedAt';
@@ -504,4 +509,5 @@ export const dislikeVideo = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server error' });
     }
 }
+
 

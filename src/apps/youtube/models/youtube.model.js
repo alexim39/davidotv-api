@@ -54,7 +54,6 @@ const youtubeVideoSchema = mongoose.Schema(
     },
 
     // Engagement Metrics
-
     // App-Specific Metrics
     appViews: {
       type: Number,
