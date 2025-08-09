@@ -20,6 +20,7 @@ import PlaylistRouter from './src/apps/playlist/index.js';
 import SettingsRouter from './src/apps/settings/index.js';
 import ProfileImageRouter from './src/services/profile-image.js';
 import StoreRouter from './src/apps/store/index.js';
+import TransactionRouter from './src/apps/transaction/index.js';
 
 
 const port = process.env.PORT || 3000;
@@ -51,6 +52,7 @@ app.use('/playlist', PlaylistRouter);
 app.use('/settings', SettingsRouter);
 app.use('/image', ProfileImageRouter);
 app.use('/store', StoreRouter);
+app.use('/transaction', TransactionRouter);
 
 // Serve static files
 app.use('/uploads', express.static(path.join(process.cwd(), 'src', 'uploads')));

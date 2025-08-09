@@ -187,7 +187,31 @@ const userSchema = mongoose.Schema(
                 default: false
               }
             },
-        }
+        },
+        savedAccounts: [
+            {
+                bank: {
+                type: String,
+                required: true,
+                },
+                bankCode: {
+                type: String,
+                required: true,
+                },
+                accountNumber: {
+                type: String,
+                required: true,
+                },
+                accountName: {
+                type: String,
+                required: true,
+                },
+            }
+        ],
+        balance: {
+            type: Number,
+            default: 0,
+        },
     },
     { timestamps: true }
 );
