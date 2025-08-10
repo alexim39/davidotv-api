@@ -55,7 +55,7 @@ const config = {
 };
 
 // Video data formatter with official content check
-async function formatVideoData(item, videoDetails = {}) {
+/* async function formatVideoData(item, videoDetails = {}) {
   if (!item?.id?.videoId || !item?.snippet) {
     throw new Error('Invalid video item format');
   }
@@ -77,6 +77,56 @@ async function formatVideoData(item, videoDetails = {}) {
       maxres: item.snippet.thumbnails?.maxres?.url || ''
     },
     duration: videoDetails.duration || '',
+    views: videoDetails.viewCount || 0,
+    likes: videoDetails.likeCount || 0,
+    dislikes: videoDetails.dislikeCount || 0,
+    commentCount: videoDetails.commentCount || 0,
+    isOfficialContent: isOfficial,
+    tags: item.snippet.tags || [],
+    lastUpdatedFromYouTube: new Date()
+  };
+} */
+
+  // Video data formatter with official content check and duration processing
+async function formatVideoData(item, videoDetails = {}) {
+  if (!item?.id?.videoId || !item?.snippet) {
+    throw new Error('Invalid video item format');
+  }
+
+  const isOfficial = config.youtube.channelIds.includes(item.snippet.channelId);
+
+  // --- START of logic from the first code snippet ---
+  let totalSeconds = 0;
+  const durationString = videoDetails.duration || '';
+  if (durationString) {
+    const matches = durationString.match(/PT(?:(\d+)M)?(?:(\d+)S)?/);
+    if (matches) {
+      const minutes = parseInt(matches[1] || '0', 10);
+      const seconds = parseInt(matches[2] || '0', 10);
+      totalSeconds = (minutes * 60) + seconds;
+    }
+  }
+
+  const isShort = totalSeconds <= 120; // ← Now a constant check
+  // --- END of logic from the first code snippet ---
+
+  return {
+    youtubeVideoId: item.id.videoId,
+    title: item.snippet.title,
+    description: item.snippet.description,
+    channel: item.snippet.channelTitle,
+    channelId: item.snippet.channelId,
+    publishedAt: new Date(item.snippet.publishedAt),
+    thumbnail: {
+      default: item.snippet.thumbnails?.default?.url || '',
+      medium: item.snippet.thumbnails?.medium?.url || '',
+      high: item.snippet.thumbnails?.high?.url || '',
+      standard: item.snippet.thumbnails?.standard?.url || '',
+      maxres: item.snippet.thumbnails?.maxres?.url || ''
+    },
+    duration: durationString,
+    durationSeconds: totalSeconds, // <--- New field
+    isShort: isShort,             // <--- New field
     views: videoDetails.viewCount || 0,
     likes: videoDetails.likeCount || 0,
     dislikes: videoDetails.dislikeCount || 0,
@@ -117,7 +167,7 @@ async function getVideoDetails(videoId, retries = config.app.maxRetries) {
 }
 
 // Save videos with classification
-async function saveVideos(videos, menuType) {
+/* async function saveVideos(videos, menuType) {
   try {
     const bulkOps = [];
 
@@ -161,7 +211,55 @@ async function saveVideos(videos, menuType) {
     logger.error(`Database save error for ${menuType}: ${error.message}`);
     throw error;
   }
+} */
+
+// You don't need to change the saveVideos function itself,
+// because the `...video` spread operator will now include
+// the new `durationSeconds` and `isShort` fields.
+async function saveVideos(videos, menuType) {
+  try {
+    const bulkOps = [];
+    for (const video of videos) {
+      if (!video.youtubeVideoId) continue;
+      
+      const update = {
+        $set: {
+          ...video, 
+          lastUpdatedFromYouTube: new Date()
+        },
+        $setOnInsert: {
+          createdAt: new Date()
+        },
+        $addToSet: {
+          menuTypes: {
+            $each: determineMenuTypes(video, menuType)
+          }
+        }
+      };
+
+      bulkOps.push({
+        updateOne: {
+          filter: { youtubeVideoId: video.youtubeVideoId },
+          update,
+          upsert: true
+        }
+      });
+    }
+
+    if (bulkOps.length === 0) {
+      logger.warn(`No valid videos to save for ${menuType}`);
+      return;
+    }
+
+    const result = await YoutubeVideoModel.bulkWrite(bulkOps);
+    logger.info(`Saved ${result.upsertedCount} new and updated ${result.modifiedCount} existing videos for ${menuType}`);
+    return result;
+  } catch (error) {
+    logger.error(`Database save error for ${menuType}: ${error.message}`);
+    throw error;
+  }
 }
+
 
 // Determine menu types
 function determineMenuTypes(video, primaryMenuType) {
