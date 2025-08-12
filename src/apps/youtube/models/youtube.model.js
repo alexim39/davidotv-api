@@ -41,7 +41,7 @@ const youtubeVideoSchema = mongoose.Schema(
     },
     duration: {
       type: String, // ISO 8601 format (e.g. PT1M33S)
-      required: true
+      //required: true
     },
     durationSeconds: {
       type: Number,
