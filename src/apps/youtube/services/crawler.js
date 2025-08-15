@@ -1,10 +1,10 @@
 import cron from 'node-cron';
 import axios from 'axios';
-import { YoutubeVideoModel } from './../../youtube/models/youtube.model.js'; // Assuming this path is correct
+import { YoutubeVideoModel } from './../../youtube/models/youtube.model.js';
 import rateLimit from 'axios-rate-limit';
 import winston from 'winston';
 
-// Configure logger
+// Logger setup
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -13,38 +13,36 @@ const logger = winston.createLogger({
   ),
   transports: [
     new winston.transports.Console(),
-    // new winston.transports.File({ filename: 'cron.log' }) // Uncomment to log to file
+    // new winston.transports.File({ filename: 'cron.log' })
   ]
 });
 
-// Rate-limited YouTube API client
+// Rate-limited axios
 const youtubeApi = rateLimit(axios.create(), {
   maxRequests: 50,
   perMilliseconds: 1000
 });
 
-// Configuration
+// Config
 const config = {
   youtube: {
-    apiKey: process.env.YOUTUBE_API_KEY || 'AIzaSyCnqQosiJ2hFLBMQM691p61f2mkkpg6Q7Y', // from ago.fnc@gmail.com
+    apiKey: process.env.YOUTUBE_API_KEY || 'AIzaSyCnqQosiJ2hFLBMQM691p61f2mkkpg6Q7Y',
     apiUrl: 'https://www.googleapis.com/youtube/v3/search',
     videosUrl: 'https://www.googleapis.com/youtube/v3/videos',
-    channelIds: ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA'], // Array of official channel IDs
+    channelIds: ['UCkBV3nBa0iRdxEGc4DUS3xA', 'UCQJOYS9v30qM74f6gZDk0TA'],
     maxResults: 50,
   },
-  // Prod
   cron: {
-    trending: '7 */7 * * *',      // 12:07 AM, 7:07 AM, 2:07 PM, etc. (every 7 hours at :07)
-    music: '23 0,12 * * *',       // 12:23 AM, 12:23 PM (every 12 hours at :23)
-    videos: '11 */5 * * *',       // 12:11 AM, 5:11 AM, 10:11 AM, etc. (every 5 hours at :11)
-    metrics: '37 */3 * * *'       // 12:37 AM, 3:37 AM, 6:37 AM, etc. (every 3 hours at :37)
+    trending: '7 */7 * * *',
+    music: '23 0,12 * * *',
+    videos: '11 */5 * * *',
+    metrics: '37 */3 * * *'
   },
-  // Dev (uncomment for development)
   // cron: {
-  //   trending: '*/5 * * * *',
-  //   music: '*/5 * * * *',
-  //   videos: '*/5 * * * *',
-  //   metrics: '*/5 * * * *'
+  //   trending: '7 * * * * *',   // Runs at second 7 of every minute
+  //   music: '23 * * * * *',     // Runs at second 23 of every minute
+  //   videos: '11 * * * * *',    // Runs at second 11 of every minute
+  //   metrics: '37 * * * * *'    // Runs at second 37 of every minute
   // },
   app: {
     maxRetries: 3,
@@ -54,40 +52,18 @@ const config = {
   }
 };
 
-// Video data formatter with official content check
-/* async function formatVideoData(item, videoDetails = {}) {
-  if (!item?.id?.videoId || !item?.snippet) {
-    throw new Error('Invalid video item format');
+// ✅ Moved here so it's always in scope
+function determineMenuTypes(video, primaryMenuType) {
+  const types = [primaryMenuType];
+  if (primaryMenuType === 'music') {
+    types.push('trending');
+  } else if (primaryMenuType === 'trending' && !video.isOfficialContent) {
+    types.push('videos');
   }
+  return types;
+}
 
-  const isOfficial = config.youtube.channelIds.includes(item.snippet.channelId);
-
-  return {
-    youtubeVideoId: item.id.videoId,
-    title: item.snippet.title,
-    description: item.snippet.description,
-    channel: item.snippet.channelTitle,
-    channelId: item.snippet.channelId,
-    publishedAt: new Date(item.snippet.publishedAt),
-    thumbnail: {
-      default: item.snippet.thumbnails?.default?.url || '',
-      medium: item.snippet.thumbnails?.medium?.url || '',
-      high: item.snippet.thumbnails?.high?.url || '',
-      standard: item.snippet.thumbnails?.standard?.url || '',
-      maxres: item.snippet.thumbnails?.maxres?.url || ''
-    },
-    duration: videoDetails.duration || '',
-    views: videoDetails.viewCount || 0,
-    likes: videoDetails.likeCount || 0,
-    dislikes: videoDetails.dislikeCount || 0,
-    commentCount: videoDetails.commentCount || 0,
-    isOfficialContent: isOfficial,
-    tags: item.snippet.tags || [],
-    lastUpdatedFromYouTube: new Date()
-  };
-} */
-
-  // Video data formatter with official content check and duration processing
+// Video data formatter
 async function formatVideoData(item, videoDetails = {}) {
   if (!item?.id?.videoId || !item?.snippet) {
     throw new Error('Invalid video item format');
@@ -95,7 +71,6 @@ async function formatVideoData(item, videoDetails = {}) {
 
   const isOfficial = config.youtube.channelIds.includes(item.snippet.channelId);
 
-  // --- START of logic from the first code snippet ---
   let totalSeconds = 0;
   const durationString = videoDetails.duration || '';
   if (durationString) {
@@ -107,8 +82,7 @@ async function formatVideoData(item, videoDetails = {}) {
     }
   }
 
-  const isShort = totalSeconds <= 120; // ← Now a constant check
-  // --- END of logic from the first code snippet ---
+  const isShort = totalSeconds <= 120;
 
   return {
     youtubeVideoId: item.id.videoId,
@@ -125,8 +99,8 @@ async function formatVideoData(item, videoDetails = {}) {
       maxres: item.snippet.thumbnails?.maxres?.url || ''
     },
     duration: durationString,
-    durationSeconds: totalSeconds, // <--- New field
-    isShort: isShort,             // <--- New field
+    durationSeconds: totalSeconds,
+    isShort,
     views: videoDetails.viewCount || 0,
     likes: videoDetails.likeCount || 0,
     dislikes: videoDetails.dislikeCount || 0,
@@ -137,7 +111,7 @@ async function formatVideoData(item, videoDetails = {}) {
   };
 }
 
-// Get video details with retry logic
+// Get video details
 async function getVideoDetails(videoId, retries = config.app.maxRetries) {
   try {
     const response = await youtubeApi.get(config.youtube.videosUrl, {
@@ -166,65 +140,16 @@ async function getVideoDetails(videoId, retries = config.app.maxRetries) {
   }
 }
 
-// Save videos with classification
-/* async function saveVideos(videos, menuType) {
-  try {
-    const bulkOps = [];
-
-    for (const video of videos) {
-      if (!video.youtubeVideoId) continue;
-
-      const update = {
-        $set: {
-          ...video, // This includes views, likes, dislikes, commentCount, and other video details
-          lastUpdatedFromYouTube: new Date()
-        },
-        $setOnInsert: {
-          createdAt: new Date()
-        },
-        $addToSet: {
-          menuTypes: {
-            $each: determineMenuTypes(video, menuType)
-          }
-        }
-        // Removed the $push operation for 'updateHistory' to only store latest metrics
-      };
-
-      bulkOps.push({
-        updateOne: {
-          filter: { youtubeVideoId: video.youtubeVideoId },
-          update,
-          upsert: true
-        }
-      });
-    }
-
-    if (bulkOps.length === 0) {
-      logger.warn(`No valid videos to save for ${menuType}`);
-      return;
-    }
-
-    const result = await YoutubeVideoModel.bulkWrite(bulkOps);
-    logger.info(`Saved ${result.upsertedCount} new and updated ${result.modifiedCount} existing videos for ${menuType}`);
-    return result;
-  } catch (error) {
-    logger.error(`Database save error for ${menuType}: ${error.message}`);
-    throw error;
-  }
-} */
-
-// You don't need to change the saveVideos function itself,
-// because the `...video` spread operator will now include
-// the new `durationSeconds` and `isShort` fields.
+// ✅ This now works because determineMenuTypes is above
 async function saveVideos(videos, menuType) {
   try {
     const bulkOps = [];
     for (const video of videos) {
       if (!video.youtubeVideoId) continue;
-      
+
       const update = {
         $set: {
-          ...video, 
+          ...video,
           lastUpdatedFromYouTube: new Date()
         },
         $setOnInsert: {
@@ -260,27 +185,12 @@ async function saveVideos(videos, menuType) {
   }
 }
 
-
-// Determine menu types
-function determineMenuTypes(video, primaryMenuType) {
-  const types = [primaryMenuType];
-
-  if (primaryMenuType === 'music') {
-    types.push('trending');
-  } else if (primaryMenuType === 'trending' && !video.isOfficialContent) {
-    types.push('videos');
-  }
-
-  return types;
-}
-
-// Process videos in batches
+// Batch processor
 async function processVideosInBatches(items, processor, batchSize = config.app.batchSize) {
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize);
     try {
       await processor(batch);
-      // Introduce a small delay to respect API limits and database load
       await new Promise(resolve => setTimeout(resolve, 1500));
     } catch (error) {
       logger.error(`Error processing batch ${i}-${i + batchSize}: ${error.message}`);
@@ -288,20 +198,20 @@ async function processVideosInBatches(items, processor, batchSize = config.app.b
   }
 }
 
-// 1. Trending Videos Job
+// === CRON JOBS (unchanged) ===
+// 1. Trending videos job
 cron.schedule(config.cron.trending, async () => {
   logger.info('Starting Trending videos update...');
-
   try {
     const params = {
       part: 'snippet',
-      q: 'Davido', // Or any other trending query
+      q: 'Davido',
       type: 'video',
       maxResults: config.youtube.maxResults,
       order: 'viewCount',
-      regionCode: 'NG', // Nigeria
+      regionCode: 'NG',
       key: config.youtube.apiKey,
-      publishedAfter: new Date(Date.now() - config.app.trendingPeriodDays * 24 * 60 * 60 * 1000).toISOString()
+      publishedAfter: new Date(Date.now() - config.app.trendingPeriodDays * 86400000).toISOString()
     };
 
     const { data } = await youtubeApi.get(config.youtube.apiUrl, { params });
@@ -320,7 +230,7 @@ cron.schedule(config.cron.trending, async () => {
             logger.error(`Error processing video ${item.id.videoId}: ${error.message}`);
             return null;
           }
-        }).filter(v => v !== null) // Filter out any nulls from failed processing
+        }).filter(v => v !== null)
       );
 
       await saveVideos(videosWithDetails, 'trending');
@@ -332,17 +242,15 @@ cron.schedule(config.cron.trending, async () => {
   }
 });
 
-// 2. Music Videos Job (Official Content)
+// 2. Music videos job
 cron.schedule(config.cron.music, async () => {
   logger.info('Starting Music videos update for official channels...');
-
   try {
     for (const channelId of config.youtube.channelIds) {
       logger.info(`Processing official channel: ${channelId}`);
-
       const params = {
         part: 'snippet',
-        channelId: channelId,
+        channelId,
         type: 'video',
         maxResults: config.youtube.maxResults,
         order: 'date',
@@ -361,7 +269,6 @@ cron.schedule(config.cron.music, async () => {
             try {
               const details = await getVideoDetails(item.id.videoId);
               const videoData = await formatVideoData(item, details);
-              // Force official content flag for channel-specific videos
               videoData.isOfficialContent = true;
               return videoData;
             } catch (error) {
@@ -381,20 +288,19 @@ cron.schedule(config.cron.music, async () => {
   }
 });
 
-// 3. General Videos Job
+// 3. General videos job
 cron.schedule(config.cron.videos, async () => {
   logger.info('Starting General videos update...');
-
   try {
     const params = {
       part: 'snippet',
-      q: 'Davido', // Or any broad general search query
+      q: 'Davido',
       type: 'video',
       maxResults: config.youtube.maxResults,
       order: 'date',
       regionCode: 'NG',
       key: config.youtube.apiKey,
-      publishedAfter: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      publishedAfter: new Date(Date.now() - 30 * 86400000).toISOString()
     };
 
     const { data } = await youtubeApi.get(config.youtube.apiUrl, { params });
@@ -416,7 +322,6 @@ cron.schedule(config.cron.videos, async () => {
         }).filter(v => v !== null)
       );
 
-      // Filter out official content to avoid duplication with 'music' category
       const generalVideos = videosWithDetails.filter(v =>
         v && !config.youtube.channelIds.includes(v.channelId)
       );
@@ -430,16 +335,13 @@ cron.schedule(config.cron.videos, async () => {
   }
 });
 
-// 4. Metrics Update Job
+// 4. Metrics update job
 cron.schedule(config.cron.metrics, async () => {
   logger.info('Starting Metrics update for existing videos...');
-
   try {
-    // Find videos that haven't been updated from YouTube in the last 6 hours
-    // Limiting to 100 to process in chunks
     const staleVideos = await YoutubeVideoModel.find({
       lastUpdatedFromYouTube: {
-        $lt: new Date(Date.now() - 6 * 60 * 60 * 1000)
+        $lt: new Date(Date.now() - 6 * 3600000)
       }
     }).limit(100);
 
@@ -458,14 +360,12 @@ cron.schedule(config.cron.metrics, async () => {
                 filter: { _id: video._id },
                 update: {
                   $set: {
-                    // Overwrite with new metrics (if available, otherwise retain old)
                     views: details.viewCount || video.views,
                     likes: details.likeCount || video.likes,
                     dislikes: details.dislikeCount || video.dislikes,
                     commentCount: details.commentCount || video.commentCount,
                     lastUpdatedFromYouTube: new Date()
                   }
-                  // Removed the $push operation for 'updateHistory'
                 }
               }
             };
@@ -473,7 +373,7 @@ cron.schedule(config.cron.metrics, async () => {
             logger.error(`Failed to update metrics for video ${video.youtubeVideoId}: ${error.message}`);
             return null;
           }
-        }).filter(op => op !== null) // Filter out any nulls from failed updates
+        }).filter(op => op !== null)
       );
 
       if (updateOps.length > 0) {
