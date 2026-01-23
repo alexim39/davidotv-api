@@ -22,7 +22,6 @@ import ProfileImageRouter from './src/services/profile-image.js';
 import StoreRouter from './src/apps/store/index.js';
 import TransactionRouter from './src/apps/transaction/index.js';
 
-
 const port = process.env.PORT || 3000;
 const app = express();
 app.use(express.json()); // Use json middleware
