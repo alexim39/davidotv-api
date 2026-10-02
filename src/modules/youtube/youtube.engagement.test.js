@@ -108,6 +108,53 @@ describe('comments', () => {
   });
 });
 
+describe('reply / comment-like / delete', () => {
+  it('replies, likes, and deletes with owner enforcement', async () => {
+    const add = await auth(request(app).post('/api/v1/youtube/videos/yt-engage-1/comments'))
+      .send({ text: 'Top' });
+    const commentId = add.body.comment._id;
+
+    const reply = await auth(request(app).post(`/api/v1/youtube/videos/yt-engage-1/comments/${commentId}/replies`))
+      .send({ text: 'Reply!' });
+    expect(reply.status).toBe(201);
+    expect(reply.body.reply.parentCommentId).toBe(commentId);
+
+    const like = await auth(request(app).post(`/api/v1/youtube/videos/yt-engage-1/comments/${commentId}/like`));
+    expect(like.body).toMatchObject({ likes: 1 });
+
+    const likeAgain = await auth(request(app).post(`/api/v1/youtube/videos/yt-engage-1/comments/${commentId}/like`));
+    expect(likeAgain.status).toBe(400);
+
+    const delReply = await auth(request(app).delete(`/api/v1/youtube/videos/yt-engage-1/comments/${commentId}/replies/${reply.body.reply._id}`));
+    expect(delReply.status).toBe(200);
+
+    const del = await auth(request(app).delete(`/api/v1/youtube/videos/yt-engage-1/comments/${commentId}`));
+    expect(del.body.commentId).toBe(commentId);
+  });
+
+  it('403s deletes by non-owners', async () => {
+    const other = await UserModel.create({
+      username: 'other', name: 'O', lastname: 'T', email: 'other@testmail.com',
+      password: 'x'.repeat(12),
+    });
+    const add = await auth(request(app).post('/api/v1/youtube/videos/yt-engage-1/comments'))
+      .send({ text: 'Mine' });
+    const otherToken = (await import('../../config/auth.js')).signAuthToken(other._id);
+    const del = await request(app).delete(`/api/v1/youtube/videos/yt-engage-1/comments/${add.body.comment._id}`)
+      .set('Authorization', `Bearer ${otherToken}`);
+    expect(del.status).toBe(403);
+  });
+});
+
+describe('playlist reads', () => {
+  it('serves paginated playlist shape', async () => {
+    const res = await request(app).get('/api/v1/youtube/videos/playlist?page=1&pageSize=10');
+    expect(res.status).toBe(200);
+    expect(res.body.pagination.totalCount).toBe(1);
+    expect(res.body.data).toHaveLength(1);
+  });
+});
+
 describe('list shape parity', () => {
   it('serves {success,data[],total} for the videos menu', async () => {
     const res = await request(app).get('/api/v1/youtube/videos?menuType=videos&limit=12&page=0');

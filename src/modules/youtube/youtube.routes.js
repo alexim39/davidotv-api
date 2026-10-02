@@ -9,6 +9,7 @@ router.use(apiLimiter);
 
 router.get('/videos', ctrl.getVideos);
 router.get('/videos/search', ctrl.searchVideos);
+router.get('/videos/playlist', ctrl.getPlaylist);
 router.get('/videos/:id', ctrl.getVideoById);
 
 // Engagement writes (ported from legacy; session user, cache-invalidated).
@@ -16,5 +17,9 @@ router.get('/videos/:id', ctrl.getVideoById);
 router.post('/videos/:id/like', protect, ctrl.likeVideo);
 router.post('/videos/:id/dislike', protect, ctrl.dislikeVideo);
 router.post('/videos/:id/comments', protect, ctrl.addComment);
+router.post('/videos/:id/comments/:commentId/replies', protect, ctrl.addReply);
+router.post('/videos/:id/comments/:commentId/like', protect, ctrl.likeComment);
+router.delete('/videos/:id/comments/:commentId', protect, ctrl.deleteComment);
+router.delete('/videos/:id/comments/:parentId/replies/:replyId', protect, ctrl.deleteReply);
 
 export default router;

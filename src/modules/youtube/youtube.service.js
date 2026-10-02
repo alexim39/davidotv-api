@@ -176,4 +176,128 @@ export const addVideoComment = async ({ videoId, userId, text }) => {
   return video.comments[0];
 };
 
-export default { getVideosCached, getVideoByIdCached, searchCached, clearCache, toggleReaction, addVideoComment };
+/** Reply — same response keys as the legacy controller. */
+export const addVideoReply = async ({ videoId, parentCommentId, userId, text }) => {
+  if (!text?.trim()) throw Object.assign(new Error('Comment text required'), { statusCode: 400 });
+  const video = await findVideo(videoId);
+  if (!video) throw Object.assign(new Error('Video not found'), { statusCode: 404 });
+  if (!video.comments.id(parentCommentId)) {
+    throw Object.assign(new Error('Parent comment not found'), { statusCode: 404 });
+  }
+  await video.addReply(parentCommentId, userId, text.trim().slice(0, 1000));
+  clearCache();
+  const reply = video.comments[video.comments.length - 1];
+  return {
+    _id: reply._id,
+    userId: reply.userId,
+    text: reply.text,
+    createdAt: reply.createdAt,
+    parentCommentId: reply.parentComment,
+  };
+};
+
+/** Comment/reply like — 400 on double-like (legacy semantics). */
+export const likeVideoComment = async ({ videoId, commentId, userId }) => {
+  const video = await findVideo(videoId);
+  if (!video) throw Object.assign(new Error('Video not found'), { statusCode: 404 });
+  const comment = video.comments.id(commentId);
+  if (!comment) throw Object.assign(new Error('Comment not found'), { statusCode: 404 });
+  const uid = toObjectId(userId);
+  if (comment.likedBy.some((id) => id.equals(uid))) {
+    throw Object.assign(new Error('You already gave this a like'), { statusCode: 400 });
+  }
+  comment.likes += 1;
+  comment.likedBy.push(uid);
+  video.commentStats.totalLikes += 1;
+  await video.save();
+  clearCache();
+  return { likes: comment.likes, commentId: comment._id };
+};
+
+const canModerate = (docUserId, sessionUser) =>
+  docUserId.equals(sessionUser._id) || sessionUser.role === 'admin';
+
+/** Delete comment + cascade replies (legacy cascade, session-enforced owner). */
+export const deleteVideoComment = async ({ videoId, commentId, sessionUser }) => {
+  const video = await findVideo(videoId);
+  if (!video) throw Object.assign(new Error('Video not found'), { statusCode: 404 });
+  const target = video.comments.id(commentId);
+  if (!target) throw Object.assign(new Error('Comment not found'), { statusCode: 404 });
+  if (!canModerate(target.userId, sessionUser)) {
+    throw Object.assign(new Error('Not authorized to delete this comment.'), { statusCode: 403 });
+  }
+  const idsToRemove = [target._id];
+  const queue = [...target.replies];
+  while (queue.length > 0) {
+    const cur = video.comments.id(queue.shift());
+    if (cur) {
+      idsToRemove.push(cur._id);
+      if (cur.replies?.length) queue.push(...cur.replies);
+    }
+  }
+  video.comments = video.comments.filter((c) => !idsToRemove.some((id) => id.equals(c._id)));
+  await video.save();
+  clearCache();
+  return { commentId: target._id };
+};
+
+/** Delete a single reply (owner or admin, association-checked). */
+export const deleteVideoReply = async ({ videoId, parentCommentId, replyId, sessionUser }) => {
+  const video = await findVideo(videoId);
+  if (!video) throw Object.assign(new Error('Video not found'), { statusCode: 404 });
+  const parent = video.comments.id(parentCommentId);
+  if (!parent) throw Object.assign(new Error('Parent comment not found'), { statusCode: 404 });
+  const reply = video.comments.id(replyId);
+  if (!reply) throw Object.assign(new Error('Reply not found'), { statusCode: 404 });
+  if (!reply.parentComment || !reply.parentComment.equals(parentCommentId)) {
+    throw Object.assign(new Error('Invalid reply or parent comment association.'), { statusCode: 400 });
+  }
+  if (!canModerate(reply.userId, sessionUser)) {
+    throw Object.assign(new Error('Not authorized to delete this reply.'), { statusCode: 403 });
+  }
+  parent.replies = parent.replies.filter((rId) => !rId.equals(replyId));
+  video.comments = video.comments.filter((c) => !c._id.equals(replyId));
+  await video.save();
+  clearCache();
+  return { replyId: reply._id };
+};
+
+/** Playlist reads — ported query semantics (menuType/sort/official/paged). */
+export const getPlaylistVideos = async ({ page = 1, pageSize = 10, menuType, sort = '-publishedAt', isOfficial } = {}) => {
+  const officialIds = youtubeConfig.channelIds;
+  const pageNum = Math.max(parseInt(page) || 1, 1);
+  const pageSizeNum = Math.min(Math.max(parseInt(pageSize) || 10, 1), 50);
+
+  const filter = menuType ? { menuTypes: menuType } : {};
+  if (isOfficial === 'true') filter.channelId = { $in: officialIds };
+  else if (isOfficial === 'false') filter.channelId = { $nin: officialIds };
+
+  const sortOption =
+    sort === 'views' ? { views: -1 } :
+    sort === 'engagementScore' ? { engagementScore: -1 } :
+    { publishedAt: -1 };
+
+  const totalCount = await YoutubeVideoModel.countDocuments(filter);
+  const totalPages = Math.ceil(totalCount / pageSizeNum);
+  const videos = await YoutubeVideoModel.find(filter)
+    .sort(sortOption)
+    .skip((pageNum - 1) * pageSizeNum)
+    .limit(pageSizeNum)
+    .lean();
+
+  return {
+    data: videos.map((v) => ({
+      ...v,
+      isOfficialContent: officialIds.includes(v.channelId),
+    })),
+    pagination: {
+      currentPage: pageNum,
+      pageSize: pageSizeNum,
+      totalPages,
+      totalCount,
+      hasNextPage: pageNum < totalPages,
+    },
+  };
+};
+
+export default { getVideosCached, getVideoByIdCached, searchCached, clearCache, toggleReaction, addVideoComment, addVideoReply, likeVideoComment, deleteVideoComment, deleteVideoReply, getPlaylistVideos };

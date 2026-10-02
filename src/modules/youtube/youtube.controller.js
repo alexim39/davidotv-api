@@ -51,6 +51,52 @@ export const addComment = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+export const addReply = async (req, res, next) => {
+  try {
+    const reply = await svc.addVideoReply({
+      videoId: req.params.id,
+      parentCommentId: req.params.commentId,
+      userId: req.user._id,
+      text: req.body?.text,
+    });
+    res.status(201).json({ success: true, message: 'Reply added successfully', reply, videoId: req.params.id, parentCommentId: req.params.commentId });
+  } catch (e) { next(e); }
+};
+
+export const likeComment = async (req, res, next) => {
+  try {
+    const r = await svc.likeVideoComment({ videoId: req.params.id, commentId: req.params.commentId, userId: req.user._id });
+    res.json({ success: true, message: 'Your like has been added', ...r, videoId: req.params.id });
+  } catch (e) { next(e); }
+};
+
+export const deleteComment = async (req, res, next) => {
+  try {
+    const r = await svc.deleteVideoComment({ videoId: req.params.id, commentId: req.params.commentId, sessionUser: req.user });
+    res.json({ success: true, message: 'Comment and its replies deleted successfully.', ...r });
+  } catch (e) { next(e); }
+};
+
+export const deleteReply = async (req, res, next) => {
+  try {
+    const r = await svc.deleteVideoReply({
+      videoId: req.params.id,
+      parentCommentId: req.params.parentId,
+      replyId: req.params.replyId,
+      sessionUser: req.user,
+    });
+    res.json({ success: true, message: 'Comment reply deleted successfully.', ...r });
+  } catch (e) { next(e); }
+};
+
+export const getPlaylist = async (req, res, next) => {
+  try {
+    const { page, pageSize, menuType, sort, isOfficial } = req.query;
+    const result = await svc.getPlaylistVideos({ page, pageSize, menuType, sort, isOfficial });
+    res.json({ success: true, ...result });
+  } catch (e) { next(e); }
+};
+
 export const searchVideos = async (req, res, next) => {
   try {
     const { search, limit, page, isOfficial } = req.query;
@@ -60,4 +106,4 @@ export const searchVideos = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
-export default { getVideos, getVideoById, searchVideos, likeVideo, dislikeVideo, addComment };
+export default { getVideos, getVideoById, searchVideos, likeVideo, dislikeVideo, addComment, addReply, likeComment, deleteComment, deleteReply, getPlaylist };
