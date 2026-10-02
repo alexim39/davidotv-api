@@ -22,6 +22,7 @@ tags:
   - name: Posts
   - name: Notifications
   - name: Identity
+  - name: Analytics
   - name: Auth
   - name: Transactions
 paths:
@@ -353,6 +354,41 @@ paths:
       responses:
         '200': { description: '{ success, data: User }' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ── Analytics (WEF) ─────────────────────────────────────────────
+  /api/v1/analytics/events:
+    post:
+      tags: [Analytics]
+      summary: Track one fan action (ingestion for WEF)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                  enum: [video_watch, audio_listen, livestream_attend, event_view, talent_view, like, comment, reply, share, save, follow, post, upload, vote, attend, purchase, benefit_use]
+                refId: { type: string }
+                meta: { type: object }
+      responses:
+        '201': { description: Tracked }
+        '400': { description: Unknown event type }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/analytics/wef:
+    get:
+      tags: [Analytics]
+      summary: Weekly Engaged Fans readout (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: windowDays, in: query, schema: { type: integer, default: 7, minimum: 1, maximum: 30 } }
+      responses:
+        '200': { description: '{ success, wef, windowDays, since, computedAt }' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   # ── Auth (legacy, deprecated) ─────────────────────────────────
   /auth/signup:
