@@ -52,3 +52,17 @@ describe('notFound', () => {
     expect(res.body.message).toContain('/nope');
   });
 });
+
+describe('correlation (OBS-01)', () => {
+  it('echoes requestId on errors', () => {
+    const res = mockRes();
+    errorHandler(new Error('boom'), { method: 'GET', originalUrl: '/x', id: 'req-1' }, res, () => {});
+    expect(res.body.requestId).toBe('req-1');
+  });
+
+  it('echoes requestId on 404', () => {
+    const res = mockRes();
+    notFound({ originalUrl: '/nope', id: 'req-2' }, res);
+    expect(res.body.requestId).toBe('req-2');
+  });
+});

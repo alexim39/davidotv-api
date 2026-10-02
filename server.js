@@ -10,6 +10,7 @@ import connectDB from './src/config/database.js';
 import { initFirebase } from './src/config/firebase.js';
 import { errorHandler, notFound } from './src/middleware/errorHandler.js';
 import { apiLimiter } from './src/middleware/rateLimiter.js';
+import { requestId } from './src/middleware/requestId.js';
 
 // Single pipeline lives in modules/youtube (SEC-04). Legacy crawlers are
 // flag-gated below (after dotenv) and OFF by default — they duplicate quota.
@@ -55,6 +56,8 @@ const port = process.env.PORT || 3000;
 const app = express();
 
 // ── Middleware ──────────────────────────────────
+// OBS-01: correlation first — every downstream log/error carries req.id.
+app.use(requestId);
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
