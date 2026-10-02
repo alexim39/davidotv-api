@@ -1,4 +1,5 @@
 import { YoutubeVideoModel } from '../../apps/youtube/models/youtube.model.js';
+import mongoose from 'mongoose';
 import logger from '../../config/logger.js';
 import youtubeConfig from '../../config/youtube.js';
 
@@ -104,4 +105,75 @@ export const searchCached = async ({ search, limit=12, page=0, isOfficial }) => 
 
 export const clearCache = () => cache.clear();
 
-export default { getVideosCached, getVideoByIdCached, searchCached, clearCache };
+/** Resolve by _id or youtubeVideoId WITHOUT touching appViews. */
+const findVideo = (videoId) => {
+  const query = /^[0-9a-fA-F]{24}$/.test(videoId) ? { _id: videoId } : { youtubeVideoId: videoId };
+  return YoutubeVideoModel.findOne(query);
+};
+
+const toObjectId = (userId) =>
+  mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+
+/**
+ * Like/dislike toggle — ported from the legacy controller with one hardening:
+ * the user comes from the session (protect), not the request body.
+ * Returns the legacy response shape so FE needs no change.
+ */
+export const toggleReaction = async ({ videoId, userId, kind }) => {
+  const video = await findVideo(videoId);
+  if (!video) throw Object.assign(new Error('Video not found'), { statusCode: 404 });
+
+  const uid = toObjectId(userId);
+  const likedBy = video.appLikedBy || [];
+  const dislikedBy = video.appDislikedBy || [];
+  let liked = likedBy.some((id) => id.equals(uid));
+  let disliked = dislikedBy.some((id) => id.equals(uid));
+
+  if (kind === 'like') {
+    if (liked) {
+      video.appLikedBy.pull(uid);
+      video.appLikes = Math.max(0, (video.appLikes || 0) - 1);
+      liked = false;
+    } else {
+      video.appLikedBy.push(uid);
+      video.appLikes = (video.appLikes || 0) + 1;
+      liked = true;
+      if (disliked) {
+        video.appDislikedBy.pull(uid);
+        video.appDislikes = Math.max(0, (video.appDislikes || 0) - 1);
+        disliked = false;
+      }
+    }
+  } else {
+    if (disliked) {
+      video.appDislikedBy.pull(uid);
+      video.appDislikes = Math.max(0, (video.appDislikes || 0) - 1);
+      disliked = false;
+    } else {
+      video.appDislikedBy.push(uid);
+      video.appDislikes = (video.appDislikes || 0) + 1;
+      disliked = true;
+      if (liked) {
+        video.appLikedBy.pull(uid);
+        video.appLikes = Math.max(0, (video.appLikes || 0) - 1);
+        liked = false;
+      }
+    }
+  }
+
+  await video.save();
+  clearCache(); // likes must never serve stale
+  return { liked, disliked, appLikes: video.appLikes, appDislikes: video.appDislikes };
+};
+
+/** Top-level comment — session user, model invariants preserved. */
+export const addVideoComment = async ({ videoId, userId, text }) => {
+  if (!text?.trim()) throw Object.assign(new Error('Comment text required'), { statusCode: 400 });
+  const video = await findVideo(videoId);
+  if (!video) throw Object.assign(new Error('Video not found'), { statusCode: 404 });
+  await video.addComment(userId, text.trim().slice(0, 1000));
+  clearCache();
+  return video.comments[0];
+};
+
+export default { getVideosCached, getVideoByIdCached, searchCached, clearCache, toggleReaction, addVideoComment };

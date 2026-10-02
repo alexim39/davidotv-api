@@ -219,12 +219,54 @@ paths:
   /api/v1/youtube/videos/{id}:
     get:
       tags: [YouTube]
-      summary: One video by _id or youtubeVideoId (increments appViews)
+      summary: One video by _id or youtubeVideoId (nested comment tree, appViews++)
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
       responses:
-        '200': { description: Video with comments }
+        '200': { description: Video with nested comments }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/youtube/videos/{id}/like:
+    post:
+      tags: [YouTube]
+      summary: Toggle like (session user; clears read cache)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '{ success, message, liked, disliked, appLikes, appDislikes }' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/youtube/videos/{id}/dislike:
+    post:
+      tags: [YouTube]
+      summary: Toggle dislike (session user; clears read cache)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '{ success, message, liked, disliked, appLikes, appDislikes }' }
+
+  /api/v1/youtube/videos/{id}/comments:
+    post:
+      tags: [YouTube]
+      summary: Add top-level comment (session user; clears read cache)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, maxLength: 1000 }
+      responses:
+        '201': { description: '{ success, message, comment }' }
+        '400': { description: Comment text required }
 
   # ── User (self profile) ───────────────────────────────────────
   /api/v1/user/me:

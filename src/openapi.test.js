@@ -36,6 +36,17 @@ describe('openapi.yaml', () => {
     expect(ops).toContain('post /api/v1/talent-upload/{id}/call-up');
   });
 
+  it('documents youtube engagement writes (protect + cache note)', () => {
+    for (const p of [
+      '/api/v1/youtube/videos/{id}/like',
+      '/api/v1/youtube/videos/{id}/dislike',
+      '/api/v1/youtube/videos/{id}/comments',
+    ]) {
+      expect(doc.paths[p], p).toBeDefined();
+      expect(doc.paths[p].post.security).toBeDefined();
+    }
+  });
+
   it('documents SEC-03 payout containment (protect + min amount)', () => {
     const op = doc.paths['/transaction/withdraw-request'].post;
     expect(op.security).toBeDefined();
