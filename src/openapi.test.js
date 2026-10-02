@@ -47,6 +47,19 @@ describe('openapi.yaml', () => {
     }
   });
 
+  it('documents membership billing (plans → subscribe → verify/webhook)', () => {
+    for (const p of [
+      '/api/v1/membership/plans',
+      '/api/v1/membership/subscribe',
+      '/api/v1/membership/verify/{reference}',
+      '/api/v1/membership/webhook',
+      '/api/v1/membership/me',
+    ]) {
+      expect(doc.paths[p], p).toBeDefined();
+    }
+    expect(doc.paths['/api/v1/membership/subscribe'].post.security).toBeDefined();
+  });
+
   it('documents SEC-03 payout containment (protect + min amount)', () => {
     const op = doc.paths['/transaction/withdraw-request'].post;
     expect(op.security).toBeDefined();

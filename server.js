@@ -40,6 +40,7 @@ import PostRouter from './src/modules/post/post.routes.js';
 import NotificationRouter from './src/modules/notification/notification.routes.js';
 import IdentityRouter from './src/modules/identity/identity.routes.js';
 import AnalyticsRouter from './src/modules/analytics/analytics.routes.js';
+import MembershipRouter from './src/modules/membership/membership.routes.js';
 
 dotenv.config();
 
@@ -67,6 +68,9 @@ export const createApp = () => {
   app.use(requestId);
   // API-01: rate-limit real traffic (was post-mount, i.e. 404s only).
   app.use(apiLimiter);
+  // Membership webhook needs the RAW body for HMAC — before express.json.
+  app.use('/api/v1/membership/webhook', express.raw({ type: 'application/json', limit: '1mb' }));
+  app.use('/api/membership/webhook', express.raw({ type: 'application/json', limit: '1mb' }));
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: false }));
   app.use(cookieParser());
@@ -90,7 +94,7 @@ export const createApp = () => {
     success: true,
     name: 'DavidO TV API',
     version: 'v1',
-    mounts: ['talent-upload', 'youtube', 'user', 'posts', 'notifications', 'identity', 'analytics'],
+    mounts: ['talent-upload', 'youtube', 'user', 'posts', 'notifications', 'identity', 'analytics', 'membership'],
   }));
 
   // ── Modular routes: canonical /api/v1 + compat /api and bare ──
@@ -117,6 +121,9 @@ export const createApp = () => {
 
   app.use('/api/v1/analytics', AnalyticsRouter);
   app.use('/api/analytics', AnalyticsRouter);
+
+  app.use('/api/v1/membership', MembershipRouter);
+  app.use('/api/membership', MembershipRouter);
 
   // ── Legacy routes (frozen, deprecated — do not add endpoints here) ──
   app.use('/auth', deprecated, AuthRouter);

@@ -23,6 +23,7 @@ tags:
   - name: Notifications
   - name: Identity
   - name: Analytics
+  - name: Membership
   - name: Auth
   - name: Transactions
 paths:
@@ -430,6 +431,90 @@ paths:
         - { name: windowDays, in: query, schema: { type: integer, default: 7, minimum: 1, maximum: 30 } }
       responses:
         '200': { description: '{ success, wef, windowDays, since, computedAt }' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ── Membership (pay-as-you-go, Paystack test mode) ─────────────
+  /api/v1/membership/plans:
+    get:
+      tags: [Membership]
+      summary: Public plan catalog (cheap NGN tiers)
+      responses:
+        '200': { description: '{ success, data[plans] }' }
+
+  /api/v1/membership/subscribe:
+    post:
+      tags: [Membership]
+      summary: Start checkout → Paystack authorization URL
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tier]
+              properties:
+                tier: { type: string, enum: [fan_weekly, fan_monthly, fan_yearly] }
+      responses:
+        '201': { description: '{ success, authorizationUrl, reference, tier }' }
+        '400': { description: Unknown or free tier }
+        '503': { description: Billing not configured }
+
+  /api/v1/membership/verify/{reference}:
+    get:
+      tags: [Membership]
+      summary: Verify + activate after Paystack return (idempotent)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: reference, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Activated membership }
+        '402': { description: Payment not successful }
+        '404': { description: Unknown reference }
+
+  /api/v1/membership/webhook:
+    post:
+      tags: [Membership]
+      summary: Paystack webhook (HMAC-SHA512 over raw body)
+      parameters:
+        - { name: x-paystack-signature, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event: { type: string }
+                data: { type: object }
+      responses:
+        '200': { description: Ack (unknown refs fail closed) }
+        '401': { description: Invalid signature }
+
+  /api/v1/membership/me:
+    get:
+      tags: [Membership]
+      summary: Own effective membership + entitlements (free default)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: '{ success, data }' }
+
+  /api/v1/membership/cancel:
+    post:
+      tags: [Membership]
+      summary: Cancel (benefits run to period end)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Cancelled membership }
+        '404': { description: No active membership }
+
+  /api/v1/membership/overview:
+    get:
+      tags: [Membership]
+      summary: Admin counts (active/pending)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: '{ success, data }' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   # ── Auth (legacy, deprecated) ─────────────────────────────────
