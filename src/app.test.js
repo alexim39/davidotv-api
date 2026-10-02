@@ -13,6 +13,7 @@ describe('versioning (API-01)', () => {
     expect(res.status).toBe(200);
     expect(res.body.version).toBe('v1');
     expect(res.body.mounts).toContain('identity');
+    expect(res.body.mounts).toContain('orders');
   });
 
   it('aliases /api and /api/v1 for modular routers', async () => {

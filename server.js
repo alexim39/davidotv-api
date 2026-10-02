@@ -41,6 +41,7 @@ import NotificationRouter from './src/modules/notification/notification.routes.j
 import IdentityRouter from './src/modules/identity/identity.routes.js';
 import AnalyticsRouter from './src/modules/analytics/analytics.routes.js';
 import MembershipRouter from './src/modules/membership/membership.routes.js';
+import OrdersRouter from './src/modules/orders/orders.routes.js';
 
 dotenv.config();
 
@@ -94,7 +95,7 @@ export const createApp = () => {
     success: true,
     name: 'DavidO TV API',
     version: 'v1',
-    mounts: ['talent-upload', 'youtube', 'user', 'posts', 'notifications', 'identity', 'analytics', 'membership'],
+    mounts: ['talent-upload', 'youtube', 'user', 'posts', 'notifications', 'identity', 'analytics', 'membership', 'orders'],
   }));
 
   // ── Modular routes: canonical /api/v1 + compat /api and bare ──
@@ -124,6 +125,9 @@ export const createApp = () => {
 
   app.use('/api/v1/membership', MembershipRouter);
   app.use('/api/membership', MembershipRouter);
+
+  app.use('/api/v1/orders', OrdersRouter);
+  app.use('/api/orders', OrdersRouter);
 
   // ── Legacy routes (frozen, deprecated — do not add endpoints here) ──
   app.use('/auth', deprecated, AuthRouter);

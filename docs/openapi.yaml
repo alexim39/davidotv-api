@@ -24,6 +24,7 @@ tags:
   - name: Identity
   - name: Analytics
   - name: Membership
+  - name: Orders
   - name: Auth
   - name: Transactions
 paths:
@@ -540,6 +541,91 @@ paths:
       responses:
         '200': { description: '{ success, data }' }
         '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ── Orders (real checkout, member discount server-side) ───────
+  /api/v1/orders/quote:
+    post:
+      tags: [Orders]
+      summary: Server-side price quote (member discount included)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId: { type: string }
+                      quantity: { type: integer, minimum: 1 }
+                      selectedVariant:
+                        type: object
+                        properties:
+                          name: { type: string }
+                          option: { type: string }
+                shippingMethod: { type: string, enum: [standard, express], default: standard }
+      responses:
+        '200': { description: '{ success, data{lines,subtotal,discountPct,discount,shipping,total,tier} }' }
+        '400': { description: Empty cart / bad quantity / short stock }
+
+  /api/v1/orders/checkout:
+    post:
+      tags: [Orders]
+      summary: Place a paid order (verified Paystack reference, idempotent)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items, paymentReference]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId: { type: string }
+                      quantity: { type: integer, minimum: 1 }
+                shippingMethod: { type: string, enum: [standard, express] }
+                shippingAddress: { type: object }
+                paymentReference: { type: string }
+      responses:
+        '201': { description: Created order }
+        '200': { description: Replay of an existing reference (idempotent) }
+        '402': { description: Payment not successful or underpaid }
+        '409': { description: Stock changed during checkout }
+
+  /api/v1/orders:
+    get:
+      tags: [Orders]
+      summary: Own orders, newest first
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 12, maximum: 50 } }
+      responses:
+        '200': { description: Paginated orders }
+
+  /api/v1/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: One order (owner or admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Order }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ── Auth (legacy, deprecated) ─────────────────────────────────
   /auth/signup:

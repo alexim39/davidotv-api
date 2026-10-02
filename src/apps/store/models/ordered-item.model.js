@@ -26,4 +26,6 @@ const orderItemSchema = mongoose.Schema({
     } 
 );
 
+// Exported for order.model.js (previously missing — importing OrderModel crashed).
+export { orderItemSchema };
 export const OrderItemModel = mongoose.model('OrderItem', orderItemSchema);

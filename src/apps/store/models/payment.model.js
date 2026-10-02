@@ -4,7 +4,8 @@ import mongoose from 'mongoose';
 const paymentInfoSchema = mongoose.Schema({
   method: {
     type: String,
-    enum: ['credit_card', 'paypal', 'bank_transfer', 'crypto', 'other'],
+    // 'paystack' added for the orders module (previously unused collection).
+    enum: ['credit_card', 'paypal', 'bank_transfer', 'crypto', 'paystack', 'other'],
     required: true
   },
   transactionId: String,
@@ -31,4 +32,6 @@ const paymentInfoSchema = mongoose.Schema({
   }
 );
 
+// Exported for order.model.js (previously missing — importing OrderModel crashed).
+export { paymentInfoSchema };
 export const PaymentInfoModel = mongoose.model('PaymentInfo', paymentInfoSchema);

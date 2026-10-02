@@ -19,11 +19,19 @@ describe('openapi.yaml', () => {
     expect(doc.components.schemas.Error).toBeDefined();
   });
 
-  it('covers all six /api/v1 mounts', () => {
-    for (const m of ['talent-upload', 'youtube', 'user', 'posts', 'notifications', 'identity']) {
+  it('covers all /api/v1 mounts', () => {
+    for (const m of ['talent-upload', 'youtube', 'user', 'posts', 'notifications', 'identity', 'analytics', 'membership', 'orders']) {
       const hit = Object.keys(doc.paths).some((p) => p.startsWith(`/api/v1/${m}`));
       expect(hit, m).toBe(true);
     }
+  });
+
+  it('documents real checkout (quote + verified orders)', () => {
+    for (const p of ['/api/v1/orders/quote', '/api/v1/orders/checkout', '/api/v1/orders/{id}']) {
+      expect(doc.paths[p], p).toBeDefined();
+    }
+    expect(doc.paths['/api/v1/analytics/events']).toBeDefined();
+    expect(doc.paths['/api/v1/analytics/wef']).toBeDefined();
   });
 
   it('covers every talent-upload route (10 ops incl. call-up)', () => {
