@@ -2,6 +2,7 @@ import { TalentUploadModel } from './talent.model.js';
 import logger from '../../config/logger.js';
 import { sendMail } from '../../config/mailer.js';
 import { getFirebase } from '../../config/firebase.js';
+import { create as createNotification } from '../notification/notification.service.js';
 
 /**
  * Service layer - business logic isolated from controller.
@@ -175,7 +176,23 @@ export const triggerCallUp = async ({ id, adminUser }) => {
     logger.error('Call-Up email failed', { error: e.message, uploadId: id });
   }
 
-  // 3) WebSocket: if you have Socket.IO, emit here
+  // 3) In-app notification fan-out (P2): persists even when push/email are
+  // unconfigured, so the bell always works. Idempotent — early return above
+  // prevents duplicates on repeat calls.
+  try {
+    await createNotification({
+      recipient: doc.uploader._id,
+      actor: adminUser._id,
+      type: 'CALL_UP',
+      title: 'You’ve been Called Up ✨',
+      body: `Davido’s team selected "${doc.title}" for a potential collaboration.`,
+      data: { uploadId: String(doc._id), title: doc.title },
+    });
+  } catch (e) {
+    logger.error('Call-Up notification failed', { error: e.message, uploadId: id });
+  }
+
+  // 4) WebSocket: if you have Socket.IO, emit here
   // io.to(`user:${doc.uploader._id}`).emit('call_up', { uploadId: doc._id, title: doc.title });
 
   logger.info('Call-Up protocol complete', { uploadId: id, admin: adminUser._id });
