@@ -47,6 +47,11 @@ describe('openapi.yaml', () => {
     }
   });
 
+  it('documents notification preferences', () => {
+    expect(doc.paths['/api/v1/notifications/preferences']).toBeDefined();
+    expect(doc.paths['/api/v1/notifications/preferences'].put.security).toBeDefined();
+  });
+
   it('documents membership billing (plans → subscribe → verify/webhook)', () => {
     for (const p of [
       '/api/v1/membership/plans',

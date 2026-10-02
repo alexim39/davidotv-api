@@ -2,7 +2,7 @@ import { TalentUploadModel } from './talent.model.js';
 import logger from '../../config/logger.js';
 import { sendMail } from '../../config/mailer.js';
 import { getFirebase } from '../../config/firebase.js';
-import { create as createNotification } from '../notification/notification.service.js';
+import { create as createNotification, shouldSend } from '../notification/notification.service.js';
 
 /**
  * Service layer - business logic isolated from controller.
@@ -120,10 +120,11 @@ export const triggerCallUp = async ({ id, adminUser }) => {
   doc.calledUpBy = adminUser._id;
   await doc.save();
 
-  // 1) WebSocket/Firebase push
+  // 1) WebSocket/Firebase push (skipped when the artist muted push)
   try {
     const fb = getFirebase();
-    if (fb && doc.uploader?.email) {
+    const pushAllowed = await shouldSend(doc.uploader._id, 'CALL_UP', 'push');
+    if (fb && doc.uploader?.email && pushAllowed) {
       // Expect client FCM token stored on user doc; fallback to topic
       // For now send to topic `talent_<uploaderId>` or direct if token exists
       const user = doc.uploader;
@@ -152,10 +153,11 @@ export const triggerCallUp = async ({ id, adminUser }) => {
     logger.error('FCM push failed', { error: e.message, uploadId: id });
   }
 
-  // 2) Email dispatch
+  // 2) Email dispatch (skipped when the artist muted email)
   try {
     const recipient = doc.uploader?.email;
-    if (recipient) {
+    const emailAllowed = await shouldSend(doc.uploader._id, 'CALL_UP', 'email');
+    if (recipient && emailAllowed) {
       await sendMail({
         to: recipient,
         subject: `🎉 You've been Called Up — Davido wants to collaborate on "${doc.title}"`,

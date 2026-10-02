@@ -17,4 +17,13 @@ router.patch('/:id/read', protect, async (req,res,next)=>{
   try{ const n= await svc.markRead(req.user._id, req.params.id); res.json({success:true,data:n}); }catch(e){ next(e); }
 });
 
+// NOT-01: own channel/type preferences (in-app bell cannot be muted).
+router.get('/preferences', protect, async (req,res,next)=>{
+  try{ const p = await svc.getPreferences(req.user._id); res.json({success:true,data:p}); }catch(e){ next(e); }
+});
+
+router.put('/preferences', protect, async (req,res,next)=>{
+  try{ const p = await svc.updatePreferences(req.user._id, req.body); res.json({success:true,data:p}); }catch(e){ next(e); }
+});
+
 export default router;

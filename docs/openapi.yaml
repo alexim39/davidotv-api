@@ -388,6 +388,30 @@ paths:
       responses:
         '200': { description: Notification }
 
+  /api/v1/notifications/preferences:
+    get:
+      tags: [Notifications]
+      summary: Own channel/type preferences (upserted defaults)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: '{ success, data }' }
+    put:
+      tags: [Notifications]
+      summary: Update preferences (whitelisted fields only)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                push: { type: boolean }
+                email: { type: boolean }
+                mutedTypes: { type: array, items: { type: string } }
+      responses:
+        '200': { description: '{ success, data }' }
+
   # ── Identity ──────────────────────────────────────────────────
   /api/v1/identity/me:
     get:

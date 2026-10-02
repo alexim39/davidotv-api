@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import logger from '../../config/logger.js';
+import { NotificationPreferenceModel } from './preferences.model.js';
 
 const notificationSchema = new mongoose.Schema({
   recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -40,4 +41,45 @@ export const markAllRead = async (userId) => {
   return NotificationModel.updateMany({ recipient:userId, read:false }, { read:true });
 };
 
-export default { NotificationModel, create, listForUser, markRead, markAllRead };
+const KNOWN_TYPES = ['CALL_UP', 'LIKE', 'COMMENT', 'FOLLOW', 'SYSTEM'];
+
+/** Defaults upserted — every user effectively has preferences. */
+export const getPreferences = async (userId) => {
+  const doc = await NotificationPreferenceModel.findOneAndUpdate(
+    { user: userId },
+    { $setOnInsert: { user: userId } },
+    { new: true, upsert: true }
+  ).lean();
+  return doc;
+};
+
+/** Whitelisted fields only; unknown muted types dropped. */
+export const updatePreferences = async (userId, patch = {}) => {
+  const update = {};
+  if (typeof patch.push === 'boolean') update.push = patch.push;
+  if (typeof patch.email === 'boolean') update.email = patch.email;
+  if (Array.isArray(patch.mutedTypes)) {
+    update.mutedTypes = [...new Set(patch.mutedTypes.filter((t) => KNOWN_TYPES.includes(t)))];
+  }
+  const doc = await NotificationPreferenceModel.findOneAndUpdate(
+    { user: userId },
+    { $set: update, $setOnInsert: { user: userId } },
+    { new: true, upsert: true }
+  ).lean();
+  return doc;
+};
+
+/**
+ * Channel gate for fan-out senders. In-app always passes (core bell).
+ * Returns true when the (type, channel) pair should SEND.
+ */
+export const shouldSend = async (userId, type, channel) => {
+  if (channel === 'inApp') return true;
+  if (channel !== 'push' && channel !== 'email') return false;
+  const prefs = await getPreferences(userId);
+  if (prefs[channel] === false) return false;
+  if ((prefs.mutedTypes || []).includes(type)) return false;
+  return true;
+};
+
+export default { NotificationModel, create, listForUser, markRead, markAllRead, getPreferences, updatePreferences, shouldSend };
