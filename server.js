@@ -38,6 +38,7 @@ import YoutubeRouter from './src/modules/youtube/youtube.routes.js';
 import UserRouter from './src/modules/user/user.routes.js';
 import PostRouter from './src/modules/post/post.routes.js';
 import NotificationRouter from './src/modules/notification/notification.routes.js';
+import IdentityRouter from './src/modules/identity/identity.routes.js';
 
 dotenv.config();
 
@@ -70,6 +71,7 @@ app.use('/talent-upload', TalentRouter); // bare for old FE compat
 
 app.use('/api/youtube', YoutubeRouter);
 app.use('/api/user', UserRouter);
+app.use('/api/identity', IdentityRouter);
 app.use('/api/posts', PostRouter);
 app.use('/api/post', PostRouter);
 app.use('/api/notifications', NotificationRouter);

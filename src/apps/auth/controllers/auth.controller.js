@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { userPasswordResetLinkEmailTemplate } from "../services/email/userResetPasswordTemplate.js";
 import { sendEmail } from "../../../services/emailService.js";
 import crypto from 'crypto';
-import jwt from "jsonwebtoken";
+import { signAuthToken, verifyAuthToken, setAuthCookies, clearAuthCookies } from "../../../config/auth.js";
 import { userAccountActivationEmailTemplate } from "../services/email/userActivationTemplate.js";
 import dotenv  from "dotenv"
 dotenv.config()
@@ -67,6 +67,11 @@ export const signup = async (req, res) => {
 
         await newUser.save();
 
+        // SEC-02: issue session on signup so new FE contract {user,token} holds.
+        // Legacy clients ignore extra fields; behaviour change documented in auth-contract.md.
+        const signupToken = signAuthToken(newUser._id);
+        setAuthCookies(res, signupToken);
+
         //Send email to form owner
         const ownerSubject = 'New DavidoTV Sign Up';
         const ownerMessage = ownerEmailTemplate(newUser);
@@ -80,7 +85,7 @@ export const signup = async (req, res) => {
 
         // Exclude password from the response
         const { password: _, ...userObject } = newUser.toJSON();
-        res.status(200).json({success: true, user: userObject, message: 'Profile created successfully'}); // Use 200 Created for successful resource creation
+        res.status(201).json({success: true, user: userObject, token: signupToken, message: 'Profile created successfully'});
 
     } catch (error) {
         console.error('Error handling User signup:', error);
@@ -99,18 +104,12 @@ export const signin = async (req, res) => {
       return res.status(400).json({ success: false, message: "Wrong email or password" });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWTTOKENSECRET, {
-      expiresIn: "1d",
-    });
+    const token = signAuthToken(user._id);
+    setAuthCookies(res, token);
 
-    res.cookie("jwt", token, {
-      httpOnly: true,
-      sameSite: "none",
-      secure: true,
-      maxAge: 24 * 60 * 60 * 1000,
-    });
-
-    res.status(200).json({ success: true, message: "SignedIn" });
+    const { password: _pw, ...userObject } = user.toJSON();
+    // Legacy shape {success,message} preserved; new contract adds {user,token} for SEC-02 FE.
+    res.status(200).json({ success: true, message: "SignedIn", user: userObject, token });
 
   } catch (error) {
     console.error("Error getting user:", error);
@@ -165,21 +164,13 @@ export const googleSignin = async (req, res) => {
     }
 
     // Now, authenticate the user regardless of whether they were newly created or already existed
-    const token = jwt.sign({ id: user._id }, process.env.JWTTOKENSECRET, {
-      expiresIn: "1d",
-    });
-
-    res.cookie("jwt", token, {
-      httpOnly: true,
-      sameSite: "none",
-      secure: true,
-      maxAge: 24 * 60 * 60 * 1000,
-    });
+    const token = signAuthToken(user._id);
+    setAuthCookies(res, token);
 
     // Exclude password and other sensitive fields from the response
     const { password: _, ...userObject } = user.toJSON();
 
-    res.status(200).json({ success: true, message: "Signed in successfully with Google", user: userObject });
+    res.status(200).json({ success: true, message: "Signed in successfully with Google", user: userObject, token });
   } catch (error) {
     console.error("Error with Google Sign-In:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
@@ -188,20 +179,24 @@ export const googleSignin = async (req, res) => {
 
 // User logout
 export const signout = async (req, res) => {
-  res.cookie("jwt", "", { maxAge: 0 });
+  clearAuthCookies(res);
   res.json({ success: true, message: "Logged out successfully" });
 };
 
 // Get user details (modified to handle GET request with JWT)
+// SEC-02: accepts Bearer, `token`, or legacy `jwt` cookie; single secret.
 export const getUser = async (req, res) => {
   try {
-    const token = req.cookies["jwt"];
-    
+    const header = req.headers?.authorization;
+    const token = header?.startsWith('Bearer ')
+      ? header.slice(7)
+      : (req.cookies?.token || req.cookies?.["jwt"]);
+
     if (!token) {
       return res.status(401).json({ success: false, message: "User unauthenticated: JWT missing" });
     }
 
-    const claims = jwt.verify(token, process.env.JWTTOKENSECRET);
+    const claims = verifyAuthToken(token);
 
     if (!claims) {
       return res.status(401).json({ success: false, message: "User unauthenticated: JWT invalid" });

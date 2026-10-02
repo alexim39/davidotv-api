@@ -1,22 +1,20 @@
-import jwt from 'jsonwebtoken';
 import logger from '../config/logger.js';
+import { readRequestToken, verifyAuthToken } from '../config/auth.js';
 import { UserModel } from '../apps/user/models/user.model.js';
 
 /**
- * JWT auth middleware - supports Bearer token or cookie `token`.
+ * JWT auth middleware - single contract (SEC-02).
+ * Accepts Bearer, new `token` cookie, or legacy `jwt` cookie; verifies with
+ * unified JWT_SECRET (legacy JWTTOKENSECRET fallback during cutover).
  * Attaches req.user.
  */
 export const protect = async (req, res, next) => {
   try {
-    let token = null;
-    const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith('Bearer ')) token = authHeader.split(' ')[1];
-    else if (req.cookies?.token) token = req.cookies.token;
+    const token = readRequestToken(req);
 
     if (!token) return res.status(401).json({ success: false, message: 'Not authorized - no token' });
 
-    const secret = process.env.JWT_SECRET || 'dev-secret-change-me';
-    const decoded = jwt.verify(token, secret);
+    const decoded = verifyAuthToken(token);
 
     const user = await UserModel.findById(decoded.id).select('-password').lean();
     if (!user) return res.status(401).json({ success: false, message: 'User not found' });
