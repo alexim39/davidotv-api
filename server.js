@@ -11,11 +11,8 @@ import { initFirebase } from './src/config/firebase.js';
 import { errorHandler, notFound } from './src/middleware/errorHandler.js';
 import { apiLimiter } from './src/middleware/rateLimiter.js';
 
-// Legacy crawlers (now deprecated - new pipeline in modules/youtube)
-import './src/apps/youtube/services/crawler.js';
-import './src/apps/youtube/services/crawler2.js';
-import './src/apps/youtube/services/crawler3.js';
-// New pipeline (will de-duplicate - uses same model but cached)
+// Single pipeline lives in modules/youtube (SEC-04). Legacy crawlers are
+// flag-gated below (after dotenv) and OFF by default — they duplicate quota.
 import { startCronJobs } from './src/modules/youtube/crawler.service.js';
 
 // Legacy routers (kept for backward compat)
@@ -41,6 +38,18 @@ import NotificationRouter from './src/modules/notification/notification.routes.j
 import IdentityRouter from './src/modules/identity/identity.routes.js';
 
 dotenv.config();
+
+// SEC-04: legacy YouTube crawlers OFF by default. Dynamic import (not static)
+// so the flag is read AFTER dotenv loads — static imports would hoist above it
+// and miss .env. Set FEATURE_LEGACY_CRAWLERS=true only for rollback.
+if (process.env.FEATURE_LEGACY_CRAWLERS === 'true') {
+  logger.warn('Legacy YouTube crawlers ENABLED via flag — duplicates quota with new pipeline');
+  await import('./src/apps/youtube/services/crawler.js');
+  await import('./src/apps/youtube/services/crawler2.js');
+  await import('./src/apps/youtube/services/crawler3.js');
+} else {
+  logger.info('Legacy YouTube crawlers disabled (SEC-04) — single pipeline active');
+}
 
 const port = process.env.PORT || 3000;
 const app = express();

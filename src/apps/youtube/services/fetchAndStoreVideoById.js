@@ -140,14 +140,18 @@ async function saveVideo(videoData, menuType = 'music') {
       } 
     },
     $push: {
+      // SEC-04: cap history at last 10 entries — was unbounded per video.
       updateHistory: {
-        metrics: {
-          views: videoData.views,
-          likes: videoData.likes,
-          dislikes: videoData.dislikes,
-          commentCount: videoData.commentCount
-        },
-        updatedAt: new Date()
+        $each: [{
+          metrics: {
+            views: videoData.views,
+            likes: videoData.likes,
+            dislikes: videoData.dislikes,
+            commentCount: videoData.commentCount
+          },
+          updatedAt: new Date()
+        }],
+        $slice: -10
       }
     }
   };

@@ -13,7 +13,20 @@ import { clearCache } from './youtube.service.js';
  * - Graceful retries + Winston logs
  */
 
-const youtubeApi = rateLimit(axios.create(), { maxRequests: 50, perMilliseconds: 1000 });
+const youtubeApi = rateLimit(axios.create({ timeout: 10000 }), { maxRequests: 50, perMilliseconds: 1000 });
+
+/** SEC-04: surface quota exhaustion loudly so on-call notices before the catalog goes stale. */
+const isQuotaError = (e) =>
+  e?.response?.status === 403 &&
+  (e?.response?.data?.error?.errors || []).some((x) => x?.reason === 'quotaExceeded');
+
+const logApiError = (where, e, extra = {}) => {
+  if (isQuotaError(e)) {
+    logger.error('YouTube QUOTA EXCEEDED — catalog sync paused by Google, check API console', { where, ...extra });
+  } else {
+    logger.error(where, { error: e.message, ...extra });
+  }
+};
 
 function determineMenuTypes(video, primary) {
   const t = [primary];
@@ -74,8 +87,9 @@ async function getVideoDetails(videoId, retries = youtubeConfig.app.maxRetries) 
       tags: item.snippet?.tags || [],
     };
   } catch (e) {
+    if (isQuotaError(e)) { logApiError('getVideoDetails quota', e, { videoId }); return {}; } // no retry on quota
     if (retries > 0) { await new Promise(r=> setTimeout(r, youtubeConfig.app.retryDelay)); return getVideoDetails(videoId, retries-1); }
-    logger.error('getVideoDetails failed', { videoId, error: e.message });
+    logApiError('getVideoDetails failed', e, { videoId });
     return {};
   }
 }
@@ -130,7 +144,7 @@ export const startCronJobs = () => {
         await saveVideos(vids.filter(Boolean), 'trending');
       });
       logger.info('Cron trending done', { count: data.items.length });
-    } catch (e) { logger.error('Cron trending error', { error:e.message }); }
+    } catch (e) { logApiError('Cron trending error', e); }
   });
 
   // Music (official)
@@ -147,7 +161,7 @@ export const startCronJobs = () => {
           }));
           await saveVideos(vids, 'music');
         });
-      } catch(e){ logger.error('Cron music channel failed', { channelId, error:e.message }); }
+      } catch(e){ logApiError('Cron music channel failed', e, { channelId }); }
     }
   });
 
