@@ -1,0 +1,614 @@
+# DavidO TV API — OpenAPI 3.0 (API-01)
+# Canonical: /api/v1/*. Compat: /api/* (+ bare /talent-upload).
+# Legacy bare mounts (/auth, /youtube, /user, /store, ...) are frozen +
+# deprecated. Source of truth: davidotv-api/src/{modules,apps} + server.js.
+openapi: 3.0.3
+info:
+  title: DavidO TV API
+  version: 1.0.0
+  description: >
+    Artist-owned fan platform API. Auth: Bearer JWT or httpOnly cookie
+    (`token`, legacy `jwt`). Errors: { success:false, message, requestId }.
+servers:
+  - url: http://localhost:3000
+    description: Local dev (PORT=3000)
+  - url: https://davidotv.com
+    description: Production
+tags:
+  - name: Version
+  - name: Talent
+  - name: YouTube
+  - name: User
+  - name: Posts
+  - name: Notifications
+  - name: Identity
+  - name: Auth
+  - name: Transactions
+paths:
+  /api/v1:
+    get:
+      tags: [Version]
+      summary: Version discovery document
+      responses:
+        '200':
+          description: Mount list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  name: { type: string }
+                  version: { type: string }
+                  mounts: { type: array, items: { type: string } }
+
+  # ── Talent Hub (Next Global Star) ─────────────────────────────
+  /api/v1/talent-upload:
+    get:
+      tags: [Talent]
+      summary: Public ranked talent feed
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 12, maximum: 50 } }
+        - { name: sort, in: query, schema: { type: string } }
+        - { name: genre, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, reviewed, called_up, flagged] } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Paginated uploads
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/TalentUpload' } }
+    post:
+      tags: [Talent]
+      summary: Upload a track (multipart, audio/video ≤ 100MB)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [artistName, title, file]
+              properties:
+                artistName: { type: string, maxLength: 80 }
+                title: { type: string, maxLength: 120 }
+                genre: { type: string, default: Afrobeats }
+                description: { type: string, maxLength: 1000 }
+                file: { type: string, format: binary }
+      responses:
+        '201': { description: Created }
+        '400': { description: Validation error }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { description: File too large }
+
+  /api/v1/talent-upload/curated:
+    get:
+      tags: [Talent]
+      summary: Admin A&R queue (ranked)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Paginated uploads }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/talent-upload/{id}:
+    get:
+      tags: [Talent]
+      summary: Get one upload
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Upload }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/talent-upload/{id}/play:
+    post:
+      tags: [Talent]
+      summary: Track a play (anonymous allowed)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Play counted }
+
+  /api/v1/talent-upload/{id}/like:
+    post:
+      tags: [Talent]
+      summary: Toggle like
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '{ success, liked, likeCount }' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/talent-upload/{id}/share:
+    post:
+      tags: [Talent]
+      summary: Count a share
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '{ success, shareCount }' }
+
+  /api/v1/talent-upload/{id}/comments:
+    post:
+      tags: [Talent]
+      summary: Comment (increments commentCount)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string }
+      responses:
+        '200': { description: Comment counted }
+
+  /api/v1/talent-upload/{id}/call-up:
+    post:
+      tags: [Talent]
+      summary: Call-Up protocol (FCM push + email). Idempotent.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Artist notified }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/talent-upload/{id}/flag:
+    post:
+      tags: [Talent]
+      summary: Flag for moderation
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Flagged }
+
+  # ── YouTube (cached catalogue) ────────────────────────────────
+  /api/v1/youtube/videos:
+    get:
+      tags: [YouTube]
+      summary: Cached video list (6h TTL, cron-refreshed)
+      parameters:
+        - { name: menuType, in: query, schema: { type: string, enum: [music, trending, videos] } }
+        - { name: isOfficialContent, in: query, schema: { type: string, enum: ['true', 'false'] } }
+        - { name: isShort, in: query, schema: { type: string, enum: ['true', 'false'] } }
+        - { name: limit, in: query, schema: { type: integer, default: 12, maximum: 50 } }
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: sort, in: query, schema: { type: string, default: -publishedAt } }
+      responses:
+        '200': { description: '{ success, data[], total, page, limit }' }
+
+  /api/v1/youtube/videos/search:
+    get:
+      tags: [YouTube]
+      summary: Text + regex-fallback search
+      parameters:
+        - { name: search, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 12 } }
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: isOfficial, in: query, schema: { type: string } }
+      responses:
+        '200': { description: '{ success, data[], meta }' }
+        '400': { description: Missing query }
+
+  /api/v1/youtube/videos/{id}:
+    get:
+      tags: [YouTube]
+      summary: One video by _id or youtubeVideoId (increments appViews)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Video with comments }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── User (self profile) ───────────────────────────────────────
+  /api/v1/user/me:
+    get:
+      tags: [User]
+      summary: Own profile (no password)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: '{ success, data: User }' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/user/profile:
+    put:
+      tags: [User]
+      summary: Update profile fields
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                lastname: { type: string }
+                bio: { type: string }
+                jobTitle: { type: string }
+                personalInfo: { type: object }
+                professionalInfo: { type: object }
+                interests: { type: object }
+      responses:
+        '200': { description: Updated user }
+
+  /api/v1/user/avatar:
+    post:
+      tags: [User]
+      summary: Upload avatar (image ≤ 5MB)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [avatar]
+              properties:
+                avatar: { type: string, format: binary }
+      responses:
+        '200': { description: Updated user }
+
+  # ── Posts (community feed; also mounted at /api/v1/post) ──────
+  /api/v1/posts:
+    get:
+      tags: [Posts]
+      summary: Public feed
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 12, maximum: 50 } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Paginated posts }
+    post:
+      tags: [Posts]
+      summary: Create post (optional media)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, maxLength: 2000 }
+                media: { type: string, format: binary }
+                tags: { type: string }
+      responses:
+        '201': { description: Created }
+        '400': { description: Content required }
+
+  /api/v1/posts/{id}/like:
+    post:
+      tags: [Posts]
+      summary: Toggle like
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '{ success, liked, likeCount }' }
+
+  # ── Notifications ─────────────────────────────────────────────
+  /api/v1/notifications:
+    get:
+      tags: [Notifications]
+      summary: Own notifications, newest first
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 50 } }
+        - { name: unreadOnly, in: query, schema: { type: boolean } }
+      responses:
+        '200': { description: Paginated notifications }
+
+  /api/v1/notifications/read-all:
+    patch:
+      tags: [Notifications]
+      summary: Mark all read (registered before /{id}/read)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Done }
+
+  /api/v1/notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: Mark one read
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Notification }
+
+  # ── Identity ──────────────────────────────────────────────────
+  /api/v1/identity/me:
+    get:
+      tags: [Identity]
+      summary: Session check (new contract; legacy GET /auth kept)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: '{ success, data: User }' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ── Auth (legacy, deprecated) ─────────────────────────────────
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: Register (issues session, 201) [deprecated — use /api/v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 6 }
+                name: { type: string }
+                lastname: { type: string }
+      responses:
+        '201': { description: '{ success, user, token, message }' }
+        '400': { description: Missing fields / email taken }
+
+  /auth/signin:
+    post:
+      tags: [Auth]
+      summary: Sign in (sets jwt+token cookies) [deprecated — use /api/v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200': { description: '{ success, message, user, token }' }
+        '400': { description: Wrong email or password }
+
+  /auth/google-signin:
+    post:
+      tags: [Auth]
+      summary: Google sign-in (creates user on first login)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [googleUser]
+              properties:
+                googleUser:
+                  type: object
+                  required: [email]
+                  properties:
+                    email: { type: string }
+                    displayName: { type: string }
+                    photoURL: { type: string }
+      responses:
+        '200': { description: '{ success, message, user, token }' }
+
+  /auth/signout:
+    post:
+      tags: [Auth]
+      summary: Clear both auth cookies
+      responses:
+        '200': { description: Logged out }
+
+  /auth:
+    get:
+      tags: [Auth]
+      summary: Legacy session check (reads jwt/token/Bearer)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: '{ success, user }' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Send reset link (1h token; 404 masked when unknown)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200': { description: Reset email sent }
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Set new password with token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password, token]
+              properties:
+                password: { type: string, minLength: 6 }
+                token: { type: string }
+      responses:
+        '200': { description: Password changed }
+        '400': { description: Invalid/expired token }
+
+  /auth/change-password:
+    put:
+      tags: [Auth]
+      summary: Change password (needs current)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, currentPassword, newPassword]
+              properties:
+                id: { type: string }
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 6 }
+      responses:
+        '200': { description: Changed }
+        '401': { description: Wrong current password }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Transactions / payouts (legacy, deprecated) ───────────────
+  /transaction/banks:
+    get:
+      tags: [Transactions]
+      summary: Bank list (server-side Paystack proxy)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: '{ status, data[{name,code}] }' }
+
+  /transaction/banks/resolve:
+    get:
+      tags: [Transactions]
+      summary: Resolve account name (server-side proxy)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: account_number, in: query, required: true, schema: { type: string, pattern: '^\d{10}$' } }
+        - { name: bank_code, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '{ status, data:{account_name} }' }
+        '400': { description: Invalid input / unresolvable }
+
+  /transaction/{userId}:
+    get:
+      tags: [Transactions]
+      summary: Own history, newest first (owner or admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '{ success, message, data[] }' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /transaction/withdraw-request:
+    post:
+      tags: [Transactions]
+      summary: Atomic-debit withdrawal (owner-enforced, UUID ref, min ₦100)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bank, accountNumber, accountName, amount]
+              properties:
+                bank: { type: string, description: Bank code }
+                bankName: { type: string }
+                accountNumber: { type: string }
+                accountName: { type: string }
+                amount: { type: number, minimum: 100 }
+                userId: { type: string, description: Must match session }
+                saveAccount: { type: boolean }
+      responses:
+        '200': { description: Withdrawal processed }
+        '400': { description: Invalid amount / insufficient balance }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { description: Payment failed (balance refunded) }
+
+  /transaction/saved-accounts/{userId}/{accountId}:
+    delete:
+      tags: [Transactions]
+      summary: Delete a saved account (owner or admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+        - { name: accountId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Or httpOnly cookie `token` (new) / `jwt` (legacy).
+  responses:
+    Unauthorized:
+      description: Missing/invalid session
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Role or owner check failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: No such resource/route
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [success, message]
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string }
+        requestId: { type: string, format: uuid }
+    Paginated:
+      type: object
+      properties:
+        success: { type: boolean }
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+        totalPages: { type: integer }
+    TalentUpload:
+      type: object
+      properties:
+        _id: { type: string }
+        artistName: { type: string }
+        title: { type: string }
+        genre: { type: string }
+        description: { type: string }
+        fileUrl: { type: string }
+        coverUrl: { type: string }
+        plays: { type: integer }
+        likeCount: { type: integer }
+        shareCount: { type: integer }
+        commentCount: { type: integer }
+        callUpStatus: { type: string, enum: [pending, reviewed, called_up, flagged] }
+        uploader: { type: object }
+        createdAt: { type: string, format: date-time }

@@ -28,6 +28,7 @@
     "winston": "^3.17.0"
   },
   "devDependencies": {
+    "js-yaml": "^5.4.2",
     "nodemon": "^3.1.7",
     "supertest": "^7.3.0",
     "vitest": "^5.0.3"
