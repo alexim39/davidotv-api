@@ -1,5 +1,8 @@
 import axios from "axios";
 
+// SEC-03: prefer PAYSTACK_SECRET (rotation target); legacy PAYSTACKTOKEN fallback until cutover.
+const paystackSecret = () => process.env.PAYSTACK_SECRET || process.env.PAYSTACKTOKEN;
+
 export const processPayment = async (bankCode, accountNumber, accountName, amount) => {
   try {
     // Step 1: Create a Paystack Transfer Recipient
@@ -14,7 +17,7 @@ export const processPayment = async (bankCode, accountNumber, accountName, amoun
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.PAYSTACKTOKEN}`,
+          Authorization: `Bearer ${paystackSecret()}`,
           "Content-Type": "application/json",
         },
       }
@@ -37,7 +40,7 @@ export const processPayment = async (bankCode, accountNumber, accountName, amoun
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.PAYSTACKTOKEN}`,
+          Authorization: `Bearer ${paystackSecret()}`,
           "Content-Type": "application/json",
         },
       }
