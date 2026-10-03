@@ -226,6 +226,16 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string } }
       responses:
         '200': { description: Video with nested comments }
+        '403':
+          description: Members-only video (isExclusive + free/anonymous viewer)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: false }
+                  message: { type: string }
+                  upgradeRequired: { type: boolean, example: true }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /api/v1/youtube/videos/{id}/like:
@@ -603,6 +613,15 @@ paths:
         '200': { description: Replay of an existing reference (idempotent) }
         '402': { description: Payment not successful or underpaid }
         '409': { description: Stock changed during checkout }
+
+  /api/v1/orders/paystack-key:
+    get:
+      tags: [Orders]
+      summary: Publishable key for Paystack Inline (pk_* safe to expose)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: '{ success, data{publicKey} }' }
+        '503': { description: Card payments not configured yet }
 
   /api/v1/orders:
     get:

@@ -120,6 +120,14 @@ const youtubeVideoSchema = mongoose.Schema(
       default: false,
       index: true
     },
+    // Paywall gate: members-only content. Existing docs lack the field and
+    // read as falsy (public) — no migration needed. Set via DB/admin until
+    // the admin console lands.
+    isExclusive: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
     tags: {
       type: [String],
       default: []

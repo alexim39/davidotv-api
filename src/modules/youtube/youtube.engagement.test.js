@@ -155,6 +155,47 @@ describe('playlist reads', () => {
   });
 });
 
+describe('exclusive paywall', () => {
+  it('403s anonymous and free-tier viewers with upgradeRequired', async () => {
+    await YoutubeVideoModel.findByIdAndUpdate(video._id, { isExclusive: true });
+    clearCache();
+
+    const anon = await request(app).get('/api/v1/youtube/videos/yt-engage-1');
+    expect(anon.status).toBe(403);
+    expect(anon.body.upgradeRequired).toBe(true);
+
+    const free = await auth(request(app).get('/api/v1/youtube/videos/yt-engage-1'));
+    expect(free.status).toBe(403);
+    expect(free.body.upgradeRequired).toBe(true);
+  });
+
+  it('serves members and leaves public videos open', async () => {
+    await YoutubeVideoModel.findByIdAndUpdate(video._id, { isExclusive: true });
+    clearCache();
+
+    const member = await UserModel.create({
+      username: 'member', name: 'M', lastname: 'T', email: 'member@testmail.com',
+      password: 'x'.repeat(12),
+    });
+    const now = new Date();
+    const { MembershipModel } = await import('../membership/membership.model.js');
+    await MembershipModel.create({
+      user: member._id, tier: 'fan_monthly', status: 'active', amountNgn: 900,
+      currentPeriodStart: now, currentPeriodEnd: new Date(now.getTime() + 30 * 86400000),
+    });
+    const { signAuthToken: sign } = await import('../../config/auth.js');
+    const res = await request(app).get('/api/v1/youtube/videos/yt-engage-1')
+      .set('Authorization', `Bearer ${sign(member._id)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.youtubeVideoId).toBe('yt-engage-1');
+
+    await YoutubeVideoModel.findByIdAndUpdate(video._id, { isExclusive: false });
+    clearCache();
+    const pub = await request(app).get('/api/v1/youtube/videos/yt-engage-1');
+    expect(pub.status).toBe(200);
+  });
+});
+
 describe('list shape parity', () => {
   it('serves {success,data[],total} for the videos menu', async () => {
     const res = await request(app).get('/api/v1/youtube/videos?menuType=videos&limit=12&page=0');
