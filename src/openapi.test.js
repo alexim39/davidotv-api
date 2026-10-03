@@ -27,7 +27,7 @@ describe('openapi.yaml', () => {
   });
 
   it('documents real checkout (quote + verified orders)', () => {
-    for (const p of ['/api/v1/orders/quote', '/api/v1/orders/checkout', '/api/v1/orders/{id}']) {
+    for (const p of ['/api/v1/orders/quote', '/api/v1/orders/checkout', '/api/v1/orders/{id}', '/api/v1/orders/paystack-key']) {
       expect(doc.paths[p], p).toBeDefined();
     }
     expect(doc.paths['/api/v1/analytics/events']).toBeDefined();

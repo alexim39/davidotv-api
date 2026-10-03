@@ -12,8 +12,9 @@ let mongod = null;
 
 export const connectTestDB = async () => {
   if (mongoose.connection.readyState === 1) return;
-  // First run extracts a ~773MB binary — allow generous startup.
-  mongod = await MongoMemoryServer.create({ instance: { startTimeout: 180000 } });
+  // Cold mongod start on a loaded box exceeds the 10s default — v11 key is
+  // `launchTimeout` (a `startTimeout` key is silently ignored).
+  mongod = await MongoMemoryServer.create({ instance: { launchTimeout: 120000 } });
   await mongoose.connect(mongod.getUri());
 };
 

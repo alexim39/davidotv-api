@@ -115,6 +115,27 @@ describe('POST /checkout', () => {
   });
 });
 
+describe('paystack-key endpoint', () => {
+  it('503s when unconfigured, 200s with a key', async () => {
+    delete process.env.PAYSTACK_PUBLIC_KEY;
+    const missing = await request(app).get('/api/v1/orders/paystack-key')
+      .set('Authorization', `Bearer ${fanToken}`);
+    expect(missing.status).toBe(503);
+
+    process.env.PAYSTACK_PUBLIC_KEY = 'pk_test_123';
+    const ok = await request(app).get('/api/v1/orders/paystack-key')
+      .set('Authorization', `Bearer ${fanToken}`);
+    expect(ok.status).toBe(200);
+    expect(ok.body.data.publicKey).toBe('pk_test_123');
+    delete process.env.PAYSTACK_PUBLIC_KEY;
+  });
+
+  it('401s anonymously', async () => {
+    const res = await request(app).get('/api/v1/orders/paystack-key');
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('order reads', () => {
   it('lists own orders and 403s foreign ones', async () => {
     axios.get.mockResolvedValue({ data: { data: { status: 'success', amount: 11500 * 100, reference: 'ref-4' } } });

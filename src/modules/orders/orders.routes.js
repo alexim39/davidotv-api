@@ -4,6 +4,13 @@ import * as svc from './orders.service.js';
 
 const router = Router();
 
+// Publishable key for Paystack Inline (pk_* is safe to expose; secrets never leave the server).
+router.get('/paystack-key', protect, (_req, res) => {
+  const key = process.env.PAYSTACK_PUBLIC_KEY;
+  if (!key) return res.status(503).json({ success: false, message: 'Card payments not configured yet' });
+  res.json({ success: true, data: { publicKey: key } });
+});
+
 // Server-side quote (member discount included) — call before Paystack.
 router.post('/quote', protect, async (req, res, next) => {
   try {
