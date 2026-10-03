@@ -262,6 +262,16 @@ export const deleteVideoReply = async ({ videoId, parentCommentId, replyId, sess
   return { replyId: reply._id };
 };
 
+/** Admin: flip the paywall flag. Cache cleared so the gate takes effect now. */
+export const setExclusive = async ({ videoId, isExclusive }) => {
+  const video = await findVideo(videoId);
+  if (!video) throw Object.assign(new Error('Video not found'), { statusCode: 404 });
+  video.isExclusive = isExclusive === true;
+  await video.save();
+  clearCache();
+  return { youtubeVideoId: video.youtubeVideoId, isExclusive: video.isExclusive };
+};
+
 /** Playlist reads — ported query semantics (menuType/sort/official/paged). */
 export const getPlaylistVideos = async ({ page = 1, pageSize = 10, menuType, sort = '-publishedAt', isOfficial } = {}) => {
   const officialIds = youtubeConfig.channelIds;
@@ -300,4 +310,4 @@ export const getPlaylistVideos = async ({ page = 1, pageSize = 10, menuType, sor
   };
 };
 
-export default { getVideosCached, getVideoByIdCached, searchCached, clearCache, toggleReaction, addVideoComment, addVideoReply, likeVideoComment, deleteVideoComment, deleteVideoReply, getPlaylistVideos };
+export default { getVideosCached, getVideoByIdCached, searchCached, clearCache, toggleReaction, addVideoComment, addVideoReply, likeVideoComment, deleteVideoComment, deleteVideoReply, getPlaylistVideos, setExclusive };

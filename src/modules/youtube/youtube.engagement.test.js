@@ -196,6 +196,46 @@ describe('exclusive paywall', () => {
   });
 });
 
+describe('admin exclusivity toggle', () => {
+  it('requires a boolean, enforces admin, and clears the cache', async () => {
+    const { signAuthToken: sign } = await import('../../config/auth.js');
+    const adminUser = await UserModel.create({
+      username: 'ytadmin', name: 'A', lastname: 'T', email: 'ytadmin@testmail.com',
+      password: 'x'.repeat(12), role: 'admin',
+    });
+    const adminToken = sign(adminUser._id);
+    const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
+
+    const bad = await asAdmin(request(app).patch('/api/v1/youtube/videos/yt-engage-1/exclusive'))
+      .send({ isExclusive: 'yes' });
+    expect(bad.status).toBe(400);
+
+    const forbidden = await auth(request(app).patch('/api/v1/youtube/videos/yt-engage-1/exclusive'))
+      .send({ isExclusive: true });
+    expect(forbidden.status).toBe(403);
+
+    const anon = await request(app).patch('/api/v1/youtube/videos/yt-engage-1/exclusive')
+      .send({ isExclusive: true });
+    expect(anon.status).toBe(401);
+
+    const on = await asAdmin(request(app).patch('/api/v1/youtube/videos/yt-engage-1/exclusive'))
+      .send({ isExclusive: true });
+    expect(on.status).toBe(200);
+    expect(on.body.isExclusive).toBe(true);
+
+    // Gate live immediately (free viewer 403s; member-pass covered above).
+    const gated = await request(app).get('/api/v1/youtube/videos/yt-engage-1')
+      .set('Authorization', `Bearer ${token}`);
+    expect(gated.status).toBe(403);
+
+    const off = await asAdmin(request(app).patch('/api/v1/youtube/videos/yt-engage-1/exclusive'))
+      .send({ isExclusive: false });
+    expect(off.body.isExclusive).toBe(false);
+    const open = await request(app).get('/api/v1/youtube/videos/yt-engage-1');
+    expect(open.status).toBe(200);
+  });
+});
+
 describe('list shape parity', () => {
   it('serves {success,data[],total} for the videos menu', async () => {
     const res = await request(app).get('/api/v1/youtube/videos?menuType=videos&limit=12&page=0');

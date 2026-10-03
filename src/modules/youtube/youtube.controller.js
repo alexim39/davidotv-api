@@ -134,4 +134,14 @@ export const searchVideos = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
-export default { getVideos, getVideoById, searchVideos, likeVideo, dislikeVideo, addComment, addReply, likeComment, deleteComment, deleteReply, getPlaylist };
+export const setExclusive = async (req, res, next) => {
+  try {
+    if (typeof req.body?.isExclusive !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'isExclusive (boolean) is required' });
+    }
+    const r = await svc.setExclusive({ videoId: req.params.id, isExclusive: req.body.isExclusive });
+    res.json({ success: true, ...r });
+  } catch (e) { next(e); }
+};
+
+export default { getVideos, getVideoById, searchVideos, likeVideo, dislikeVideo, addComment, addReply, likeComment, deleteComment, deleteReply, getPlaylist, setExclusive };

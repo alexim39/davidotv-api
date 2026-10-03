@@ -260,6 +260,28 @@ paths:
       responses:
         '200': { description: '{ success, message, liked, disliked, appLikes, appDislikes }' }
 
+  /api/v1/youtube/videos/{id}/exclusive:
+    patch:
+      tags: [YouTube]
+      summary: Toggle the paywall flag (admin; clears read cache)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [isExclusive]
+              properties:
+                isExclusive: { type: boolean }
+      responses:
+        '200': { description: '{ success, youtubeVideoId, isExclusive }' }
+        '400': { description: isExclusive boolean required }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /api/v1/youtube/videos/{id}/comments:
     post:
       tags: [YouTube]

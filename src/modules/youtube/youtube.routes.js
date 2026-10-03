@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { apiLimiter } from '../../middleware/rateLimiter.js';
-import { protect } from '../../middleware/auth.js';
+import { protect, authorize } from '../../middleware/auth.js';
 import * as ctrl from './youtube.controller.js';
 
 const router = Router();
@@ -21,5 +21,8 @@ router.post('/videos/:id/comments/:commentId/replies', protect, ctrl.addReply);
 router.post('/videos/:id/comments/:commentId/like', protect, ctrl.likeComment);
 router.delete('/videos/:id/comments/:commentId', protect, ctrl.deleteComment);
 router.delete('/videos/:id/comments/:parentId/replies/:replyId', protect, ctrl.deleteReply);
+
+// Admin console: paywall flag (clears the read cache on change).
+router.patch('/videos/:id/exclusive', protect, authorize('admin'), ctrl.setExclusive);
 
 export default router;
