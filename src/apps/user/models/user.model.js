@@ -78,6 +78,7 @@ const userSchema = mongoose.Schema(
         isActive: { type: Boolean, default: true },
         isDeleted: { type: Boolean, default: false },
         avatar: { type: String, default: 'img/avatar.png' },
+        avatarPublicId: { type: String }, // Cloudinary public_id for replace/delete
         library: {
             savedVideos: [{
                 savedAt: { type: Date, default: Date.now },

@@ -2,6 +2,7 @@ import { TalentUploadModel } from './talent.model.js';
 import logger from '../../config/logger.js';
 import { sendMail } from '../../config/mailer.js';
 import { getFirebase } from '../../config/firebase.js';
+import { uploadBuffer } from '../../config/cloudinary.js';
 import { create as createNotification, shouldSend } from '../notification/notification.service.js';
 
 /**
@@ -10,18 +11,24 @@ import { create as createNotification, shouldSend } from '../notification/notifi
  */
 
 export const createUpload = async ({ artistName, title, genre, description, file, coverFile, uploaderId }) => {
-  const fileUrl = `/uploads/talent/${file.filename.includes('/') ? file.filename : `${new Date().toISOString().slice(0,7)}/${file.filename}`}`;
-  // multer already placed in correct month folder; reconstruct public url
-  const publicFileUrl = `/uploads/talent/${new Date().toISOString().slice(0,7)}/${file.filename.split('/').pop()}`;
-  // Simpler: use file.path relative
-  const relative = file.path.split('src')[1]?.replace(/\\/g,'/') ?? `/uploads/talent/${file.filename}`;
-  // Fallback to fileUrl we build from disk path
-  const finalFileUrl = relative.startsWith('/uploads') ? relative : publicFileUrl;
+  // Cloudinary straight from the memory buffer — no local disk involved.
+  // fileUrl stays an opaque playable URL for the FE (now secure_url).
+  const main = await uploadBuffer(file.buffer, {
+    mimetype: file.mimetype,
+    filename: file.originalname,
+    subfolder: 'talent',
+  });
 
   let coverUrl = null;
+  let coverPublicId = null;
   if (coverFile) {
-    const rel = coverFile.path.split('src')[1]?.replace(/\\/g,'/') ?? null;
-    coverUrl = rel;
+    const cover = await uploadBuffer(coverFile.buffer, {
+      mimetype: coverFile.mimetype,
+      filename: coverFile.originalname,
+      subfolder: 'talent/covers',
+    });
+    coverUrl = cover.url;
+    coverPublicId = cover.publicId;
   }
 
   const doc = await TalentUploadModel.create({
@@ -29,8 +36,10 @@ export const createUpload = async ({ artistName, title, genre, description, file
     title,
     genre: genre || 'Afrobeats',
     description,
-    fileUrl: finalFileUrl,
+    fileUrl: main.url,
+    filePublicId: main.publicId,
     coverUrl,
+    coverPublicId,
     mimeType: file.mimetype,
     fileSize: file.size,
     uploader: uploaderId,

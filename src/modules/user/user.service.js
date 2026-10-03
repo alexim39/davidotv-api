@@ -1,5 +1,6 @@
 import { UserModel } from '../../apps/user/models/user.model.js';
 import logger from '../../config/logger.js';
+import { uploadBuffer, deleteAsset } from '../../config/cloudinary.js';
 
 export const getMe = async (userId) => {
   const user = await UserModel.findById(userId).select('-password').lean();
@@ -22,9 +23,20 @@ export const updateProfile = async (userId, payload) => {
 };
 
 export const updateAvatar = async (userId, file) => {
-  const rel = file.path.split('src')[1]?.replace(/\\/g,'/') ?? `/uploads/profile/media/${file.filename}`;
-  const avatar = rel.startsWith('/uploads') ? rel : `/uploads/profile/media/${file.filename}`;
-  const user = await UserModel.findByIdAndUpdate(userId, { avatar }, { new: true }).select('-password');
+  // Cloudinary straight from the memory buffer; old asset removed by publicId.
+  const current = await UserModel.findById(userId).select('avatarPublicId').lean();
+  const up = await uploadBuffer(file.buffer, {
+    mimetype: file.mimetype,
+    filename: file.originalname,
+    subfolder: 'avatars',
+  });
+  await deleteAsset(current?.avatarPublicId, 'image');
+  const user = await UserModel.findByIdAndUpdate(
+    userId,
+    { avatar: up.url, avatarPublicId: up.publicId },
+    { new: true }
+  ).select('-password');
+  logger.info('Avatar updated', { userId });
   return user;
 };
 

@@ -1,57 +1,47 @@
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-
-// Ensure upload dirs exist
-const ensureDir = (dir) => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-};
 
 /**
- * Multer storage for talent hub (audio/video) + avatar.
- * - talent: src/uploads/talent/YYYY-MM
- * - avatar: src/uploads/profile/media
+ * Multer for ALL user uploads — memory only, no local disk.
+ * Files stream straight to Cloudinary via src/config/cloudinary.js
+ * (services read req.file.buffer). Limits/filters unchanged:
+ * - talent & post/forum media: audio/video (+images for posts/forum), 100MB
+ * - avatar: images only, 5MB
+ *
+ * NOTE: post/forum media accept images too (covers, artwork), so their
+ * fileFilter is wider than talent's audio/video-only rule.
  */
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Decide by fieldname
-    const isAvatar = file.fieldname === 'avatar' || req.originalUrl.includes('/avatar');
-    const base = isAvatar
-      ? path.join(process.cwd(), 'src', 'uploads', 'profile', 'media')
-      : path.join(process.cwd(), 'src', 'uploads', 'talent', new Date().toISOString().slice(0,7));
-    ensureDir(base);
-    cb(null, base);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const safe = path.basename(file.originalname, ext).replace(/[^a-z0-9_-]/gi,'_').slice(0,40);
-    cb(null, `${Date.now()}-${safe}${ext}`);
-  }
-});
+const imageFilter = (_req, file, cb) => {
+  if (/^image\//.test(file.mimetype)) return cb(null, true);
+  return cb(new Error('Only image files allowed for avatar'), false);
+};
 
-const fileFilter = (_req, file, cb) => {
-  const isAvatar = file.fieldname === 'avatar';
-  if (isAvatar) {
-    // images only
-    if (/^image\//.test(file.mimetype)) return cb(null, true);
-    return cb(new Error('Only image files allowed for avatar'), false);
-  }
-  // talent: audio/video
+const mediaFilter = (_req, file, cb) => {
+  if (/^(audio|video|image)\//.test(file.mimetype)) return cb(null, true);
+  return cb(new Error('Only audio, video or image files allowed'), false);
+};
+
+const talentFilter = (_req, file, cb) => {
   if (/^(audio|video)\//.test(file.mimetype)) return cb(null, true);
   return cb(new Error('Only audio/video files allowed'), false);
 };
 
 export const uploadTalent = multer({
-  storage,
-  fileFilter,
+  storage: multer.memoryStorage(),
+  fileFilter: talentFilter,
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB per spec
 });
 
 export const uploadAvatar = multer({
-  storage,
-  fileFilter,
+  storage: multer.memoryStorage(),
+  fileFilter: imageFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-export default { uploadTalent, uploadAvatar };
+export const uploadMedia = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: mediaFilter,
+  limits: { fileSize: 100 * 1024 * 1024 },
+});
+
+export default { uploadTalent, uploadAvatar, uploadMedia };

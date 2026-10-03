@@ -11,8 +11,10 @@ const talentUploadSchema = new mongoose.Schema(
     genre: { type: String, required: true, trim: true, default: 'Afrobeats', index: true },
     description: { type: String, trim: true, maxlength: 1000 },
 
-    fileUrl: { type: String, required: true }, // /uploads/talent/...
+    fileUrl: { type: String, required: true }, // Cloudinary secure_url (legacy docs hold /uploads/... paths)
+    filePublicId: { type: String }, // Cloudinary public_id for replace/delete
     coverUrl: { type: String },
+    coverPublicId: { type: String },
     mimeType: { type: String, required: true },
     fileSize: { type: Number, required: true },
     duration: { type: Number, default: 0 }, // seconds, optional ffprobe

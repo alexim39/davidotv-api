@@ -71,7 +71,7 @@ paths:
                       data: { type: array, items: { $ref: '#/components/schemas/TalentUpload' } }
     post:
       tags: [Talent]
-      summary: Upload a track (multipart, audio/video ≤ 100MB)
+      summary: Upload a track (multipart, audio/video ≤ 100MB, stored on Cloudinary)
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true

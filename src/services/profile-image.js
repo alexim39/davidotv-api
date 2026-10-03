@@ -1,34 +1,11 @@
 import express from 'express';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
 import multer from 'multer';
 import { UserModel } from '../apps/user/models/user.model.js';
+import { uploadBuffer, deleteAsset } from '../config/cloudinary.js';
 
 const ProfileImageRouter = express.Router();
 
-// --- Multer Configuration ---
-
-// Get directory paths
-// NOTE: Using a direct relative path for consistency with the first example.
-const uploadDir = 'src/uploads/profile/media';
-
-// Ensure uploads directory exists
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Configure storage for uploaded files
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
-        const ext = path.extname(file.originalname);
-        cb(null, `${req.params.userId}-${uniqueSuffix}${ext}`);
-    }
-});
+// --- Multer Configuration (memory only — streams to Cloudinary) ---
 
 // File filter to accept only JPEG and PNG images
 const fileFilter = (req, file, cb) => {
@@ -42,7 +19,7 @@ const fileFilter = (req, file, cb) => {
 
 // Configure multer upload middleware
 const upload = multer({
-    storage: storage,
+    storage: multer.memoryStorage(),
     fileFilter,
     limits: {
         fileSize: 5 * 1024 * 1024 // 5MB limit
@@ -53,7 +30,7 @@ const upload = multer({
 // --- Routes ---
 
 /**
- * @desc    Upload a new profile picture
+ * @desc    Upload a new profile picture (Cloudinary; same response shape)
  * @route   POST /api/profile/:userId
  * @access  Private
  */
@@ -78,7 +55,7 @@ ProfileImageRouter.post('/profile/:userId', async (req, res) => {
         }
 
         const userId = req.params.userId;
-        
+
         // If no file was uploaded, return an error
         if (!req.file) {
             return res.status(400).json({
@@ -89,33 +66,33 @@ ProfileImageRouter.post('/profile/:userId', async (req, res) => {
 
         try {
             // Find the current user
-            const currentUser = await UserModel.findById(userId);
+            const currentUser = await UserModel.findById(userId).select('avatar avatarPublicId');
             if (!currentUser) {
-                // If user not found, delete the uploaded file
-                fs.unlinkSync(req.file.path);
                 return res.status(404).json({
                     message: 'User not found.',
                     success: false
                 });
             }
 
-            // Delete old avatar if it exists and is not the default
-            if (currentUser.avatar && currentUser.avatar !== 'img/avatar.png') {
-                const oldAvatarPath = path.join(uploadDir, path.basename(currentUser.avatar));
-                if (fs.existsSync(oldAvatarPath)) {
-                    fs.unlinkSync(oldAvatarPath);
-                }
-            }
+            // Stream to Cloudinary (no local disk at any point).
+            const up = await uploadBuffer(req.file.buffer, {
+                mimetype: req.file.mimetype,
+                filename: req.file.originalname,
+                subfolder: 'avatars',
+            });
 
-            // Construct URL path for the new avatar
-            const domain ='https://davidotv-j3malln3.b4a.run';
-            const avatarUrlPath = domain + `/uploads/profile/media/${req.file.filename}`;
+            // Delete the previous Cloudinary asset (local-path avatars are
+            // simply orphaned — containers have no persistent disk anyway).
+            if (currentUser.avatarPublicId) {
+                await deleteAsset(currentUser.avatarPublicId, 'image');
+            }
 
             // Update user in database
             const updatedUser = await UserModel.findByIdAndUpdate(
                 userId,
-                { 
-                    avatar: avatarUrlPath, // Store URL path
+                {
+                    avatar: up.url, // Store URL path
+                    avatarPublicId: up.publicId,
                     $set: { 'personalInfo.lastUpdated': new Date() }
                 },
                 { new: true, runValidators: true }
@@ -124,17 +101,14 @@ ProfileImageRouter.post('/profile/:userId', async (req, res) => {
             return res.status(200).json({
                 message: 'Profile picture updated successfully',
                 success: true,
-                avatarUrl: avatarUrlPath,
+                avatarUrl: up.url,
                 user: updatedUser
             });
 
         } catch (error) {
             console.error('Upload error:', error);
-            // If a database error occurs, delete the uploaded file
-            if (req.file) {
-                fs.unlinkSync(req.file.path);
-            }
-            return res.status(500).json({
+            const status = error.statusCode || 500;
+            return res.status(status).json({
                 message: error.message || 'Upload failed',
                 success: false
             });

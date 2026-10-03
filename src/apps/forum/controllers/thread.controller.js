@@ -2,31 +2,14 @@ import { UserModel } from '../../user/models/user.model.js';
 import { ThreadModel } from './../models/thread.model.js';
 import { CommentModel } from '../models/comment.model.js';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+import { uploadBuffer } from '../../../config/cloudinary.js';
 
 
-// Configure storage for uploaded files
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Corrected path to align with express.static middleware
-    const uploadDir = 'src/uploads/forum/media'; 
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
-  }
-});
-
-// File filter to accept only certain media types
+// Memory only — media streams to Cloudinary (subfolder 'forum'), no local disk.
+// Limits/filter mirror the previous disk pipeline (50MB, image/video/audio).
 const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/') || 
-      file.mimetype.startsWith('video/') || 
+  if (file.mimetype.startsWith('image/') ||
+      file.mimetype.startsWith('video/') ||
       file.mimetype.startsWith('audio/')) {
     cb(null, true);
   } else {
@@ -35,8 +18,8 @@ const fileFilter = (req, file, cb) => {
 };
 
 // Configure multer upload middleware
-const upload = multer({ 
-  storage,
+const upload = multer({
+  storage: multer.memoryStorage(),
   fileFilter,
   limits: {
     fileSize: 50 * 1024 * 1024 // 50MB limit
@@ -68,12 +51,18 @@ export const createThread = async (req, res) => {
         tags: JSON.parse(tags || '[]')
       };
 
-      // If file was uploaded, add media info
+      // If file was uploaded, stream to Cloudinary. filename carries the
+      // public_id (required field, doubles as the delete handle).
       if (req.file) {
+        const up = await uploadBuffer(req.file.buffer, {
+          mimetype: req.file.mimetype,
+          filename: req.file.originalname,
+          subfolder: 'forum',
+        });
         threadData.media = {
-          url: `/uploads/forum/media/${req.file.filename}`,
+          url: up.url,
           type: req.file.mimetype.split('/')[0], // 'image', 'video', or 'audio'
-          filename: req.file.filename,
+          filename: up.publicId,
           originalName: req.file.originalname,
           size: req.file.size
         };

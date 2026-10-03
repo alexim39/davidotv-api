@@ -26,6 +26,11 @@ describe('openapi.yaml', () => {
     }
   });
 
+  it('notes Cloudinary storage for uploads', () => {
+    const yaml = JSON.stringify(doc);
+    expect(yaml).toContain('Cloudinary');
+  });
+
   it('documents challenges (board → entries → winner)', () => {
     for (const p of ['/api/v1/challenges', '/api/v1/challenges/{id}/entries', '/api/v1/challenges/{id}/winner']) {
       expect(doc.paths[p], p).toBeDefined();
