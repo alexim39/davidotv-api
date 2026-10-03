@@ -14,6 +14,7 @@ describe('versioning (API-01)', () => {
     expect(res.body.version).toBe('v1');
     expect(res.body.mounts).toContain('identity');
     expect(res.body.mounts).toContain('orders');
+    expect(res.body.mounts).toContain('challenges');
   });
 
   it('aliases /api and /api/v1 for modular routers', async () => {

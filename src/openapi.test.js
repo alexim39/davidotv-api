@@ -20,9 +20,15 @@ describe('openapi.yaml', () => {
   });
 
   it('covers all /api/v1 mounts', () => {
-    for (const m of ['talent-upload', 'youtube', 'user', 'posts', 'notifications', 'identity', 'analytics', 'membership', 'orders']) {
+    for (const m of ['talent-upload', 'youtube', 'user', 'posts', 'notifications', 'identity', 'analytics', 'membership', 'orders', 'challenges']) {
       const hit = Object.keys(doc.paths).some((p) => p.startsWith(`/api/v1/${m}`));
       expect(hit, m).toBe(true);
+    }
+  });
+
+  it('documents challenges (board → entries → winner)', () => {
+    for (const p of ['/api/v1/challenges', '/api/v1/challenges/{id}/entries', '/api/v1/challenges/{id}/winner']) {
+      expect(doc.paths[p], p).toBeDefined();
     }
   });
 

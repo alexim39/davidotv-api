@@ -25,6 +25,7 @@ tags:
   - name: Analytics
   - name: Membership
   - name: Orders
+  - name: Challenges
   - name: Auth
   - name: Transactions
 paths:
@@ -667,6 +668,100 @@ paths:
         '200': { description: Order }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Challenges (fan contests; ranking reuses talent engagement) ─
+  /api/v1/challenges:
+    get:
+      tags: [Challenges]
+      summary: Public board (optional status filter)
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [draft, active, judging, closed] } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 12, maximum: 50 } }
+      responses:
+        '200': { description: Paginated challenges }
+    post:
+      tags: [Challenges]
+      summary: Create a challenge (admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, startsAt, endsAt]
+              properties:
+                title: { type: string, maxLength: 120 }
+                description: { type: string }
+                hashtag: { type: string }
+                startsAt: { type: string, format: date-time }
+                endsAt: { type: string, format: date-time }
+      responses:
+        '201': { description: Created draft }
+        '400': { description: Invalid window }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/challenges/{id}/status:
+    patch:
+      tags: [Challenges]
+      summary: Transition status (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [draft, active, judging, closed] }
+      responses:
+        '200': { description: Updated challenge }
+
+  /api/v1/challenges/{id}/entries:
+    post:
+      tags: [Challenges]
+      summary: Enter one of your own uploads (active challenges only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uploadId]
+              properties:
+                uploadId: { type: string }
+      responses:
+        '201': { description: Entered }
+        '400': { description: Not accepting entries }
+        '403': { description: Not your upload }
+        '409': { description: Already entered }
+
+  /api/v1/challenges/{id}/winner:
+    post:
+      tags: [Challenges]
+      summary: Declare the winner (admin; must be an entered upload; closes)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uploadId]
+              properties:
+                uploadId: { type: string }
+      responses:
+        '200': { description: Closed with winner }
+        '400': { description: Winner not entered }
 
   # ── Auth (legacy, deprecated) ─────────────────────────────────
   /auth/signup:
