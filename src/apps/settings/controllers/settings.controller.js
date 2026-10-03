@@ -1,5 +1,5 @@
 import { UserModel } from "../../user/models/user.model.js";
-import { sendEmail } from "../../../services/emailService.js";
+
 import { ownerEmailTemplate } from "../services/email/ownerTemplate.js";
 import { userNotificationEmailTemplate } from "../services/email/userTemplate.js";
 
